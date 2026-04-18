@@ -24,11 +24,15 @@ https://raw.githubusercontent.com/develop202/migu_video/refs/heads/main/interfac
 
 https://develop202.github.io/migu_video/interface.txt
 
+https://raw.githubusercontent.com/develop202/migu_video/refs/heads/main/playback.xml
+
 ### AptvPlayer
 https://raw.githubusercontent.com/Kimentanm/aptv/master/m3u/iptv.m3u
 
 ### 范明明
 https://raw.githubusercontent.com/fanmingming/live/refs/heads/main/tv/m3u/ipv6.m3u
+
+https://raw.githubusercontent.com/fanmingming/live/refs/heads/main/e.xml
 
 ### Stymei
 https://raw.githubusercontent.com/Jsnzkpg/Jsnzkpg/refs/heads/Jsnzkpg/Jsnzkpg1.m3u ⭐
