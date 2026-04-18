@@ -200,6 +200,25 @@ class TestCZZYSpider(unittest.TestCase):
             "https://video.example/wp.m3u8",
         )
 
+    @patch.object(Spider, "_request_html")
+    def test_player_content_returns_pan_link_directly(self, mock_request_html):
+        result = self.spider.playerContent("网盘资源", "https://www.alipan.com/s/demo", {})
+        self.assertEqual(result["parse"], 0)
+        self.assertEqual(result["url"], "https://www.alipan.com/s/demo")
+        mock_request_html.assert_not_called()
+
+    @patch.object(Spider, "_request_html")
+    def test_player_content_resolves_iframe_chain(self, mock_request_html):
+        mock_request_html.side_effect = [
+            ('<iframe src="/player-v2/123"></iframe>', "https://www.czzy89.com"),
+            ("var mysvg='https://media.example/final.m3u8';", "https://www.czzy89.com"),
+        ]
+
+        result = self.spider.playerContent("厂长资源", "https://www.czzy89.com/v_play/1.html", {})
+        self.assertEqual(result["parse"], 0)
+        self.assertEqual(result["url"], "https://media.example/final.m3u8")
+        self.assertIn("Referer", result["header"])
+
 
 if __name__ == "__main__":
     unittest.main()

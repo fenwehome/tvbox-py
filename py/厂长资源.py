@@ -275,6 +275,12 @@ class Spider(BaseSpider):
 
         return ""
 
+    def _build_player_headers(self, referer):
+        return {
+            "User-Agent": self.headers["User-Agent"],
+            "Referer": referer,
+        }
+
     def categoryContent(self, tid, pg, filter, extend):
         path = self.category_paths.get(tid, self.category_paths["movie"]).format(pg=pg)
         html, host = self._request_html(path, expect_xpath="//a[@href]")
@@ -291,3 +297,33 @@ class Spider(BaseSpider):
         html, host = self._request_html(path, expect_xpath="//a[@href]")
         items = self._parse_media_cards(html, host)
         return self._page_result(items, pg)
+
+    def playerContent(self, flag, id, vipFlags):
+        if any(item in id for item in ["alipan.com", "aliyundrive.com", "quark"]):
+            return {"parse": 0, "playUrl": "", "url": id}
+
+        detail_html, host = self._request_html(id, expect_xpath="//iframe|//script")
+        iframe_url = self._extract_iframe_src(detail_html, host)
+        referer = id if id.startswith("http") else self._normalize_url(id, host)
+
+        if iframe_url:
+            iframe_html, _ = self._request_html(iframe_url, referer=referer)
+            final_url = self._extract_player_url_from_iframe(iframe_html)
+            if final_url:
+                return {
+                    "parse": 0,
+                    "playUrl": "",
+                    "url": final_url,
+                    "header": self._build_player_headers(iframe_url),
+                }
+
+        fallback = self._extract_player_url_from_iframe(detail_html)
+        if fallback:
+            return {
+                "parse": 0,
+                "playUrl": "",
+                "url": fallback,
+                "header": self._build_player_headers(referer),
+            }
+
+        return {"parse": 0, "playUrl": "", "url": ""}
