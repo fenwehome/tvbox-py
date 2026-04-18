@@ -1,4 +1,5 @@
 # coding=utf-8
+import re
 import sys
 from urllib.parse import quote
 
@@ -160,3 +161,54 @@ class Spider(BaseSpider):
         path = "/vodsearch/-------------.html?wd={0}&submit=".format(quote(key))
         html = self._request_html(path, expect_xpath="//*[@id='searchList']|//*[contains(@class,'myui-vodlist__box')]")
         return self._page_result(self._parse_search_cards(html), pg)
+
+    def _extract_text_by_prefix(self, html, prefixes):
+        texts = re.findall(r">([^<>]+)<", html)
+        for text in texts:
+            clean = text.strip()
+            for prefix in prefixes:
+                if clean.startswith(prefix):
+                    return clean.split("：", 1)[-1].strip()
+        return ""
+
+    def _parse_detail_page(self, html, vod_id):
+        root = self.html(html)
+        title = ((root.xpath("//*[contains(@class,'title')][1]//text()") or [""])[0]).strip()
+        pic = (
+            (root.xpath("//*[contains(@class,'myui-content__thumb')]//img/@data-original") or [""])[0].strip()
+            or (root.xpath("//*[contains(@class,'myui-content__thumb')]//img/@src") or [""])[0].strip()
+        )
+        content = "".join(root.xpath("//*[contains(@class,'data')][1]//text()")).strip()
+
+        episodes = []
+        seen = set()
+        for href, label in re.findall(
+            r'<a[^>]+href=["\']([^"\']*/vodplay/\d+-\d+-\d+\.html[^"\']*)["\'][^>]*>([\s\S]*?)</a>',
+            html,
+            re.I,
+        ):
+            url = self._build_url(href)
+            name = re.sub(r"<[^>]*>", "", label).strip()
+            if not url or not name or "立即播放" in name or url in seen:
+                continue
+            seen.add(url)
+            episodes.append(f"{name}${url}")
+
+        vod = {
+            "vod_id": vod_id,
+            "vod_name": title,
+            "vod_pic": self._build_url(pic),
+            "vod_year": self._extract_text_by_prefix(html, ["年份："]),
+            "vod_area": self._extract_text_by_prefix(html, ["地区："]),
+            "vod_actor": self._extract_text_by_prefix(html, ["主演："]),
+            "vod_director": self._extract_text_by_prefix(html, ["导演："]),
+            "vod_content": content,
+            "vod_play_from": "独播库",
+            "vod_play_url": "#".join(episodes),
+        }
+        return {"list": [vod]}
+
+    def detailContent(self, ids):
+        vod_id = ids[0]
+        html = self._request_html(vod_id, expect_xpath="//*[contains(@class,'title')]|//a[contains(@href,'/vodplay/')]")
+        return self._parse_detail_page(html, vod_id)

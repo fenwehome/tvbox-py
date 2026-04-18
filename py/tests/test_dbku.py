@@ -95,6 +95,39 @@ class TestDBKUSpider(unittest.TestCase):
         self.assertEqual(result["list"][0]["vod_id"], "https://www.dbku.tv/voddetail/321.html")
         self.assertEqual(result["list"][0]["vod_name"], "搜索影片")
 
+    def test_parse_detail_page_extracts_meta_and_episodes(self):
+        html = """
+        <div class="myui-content__thumb">
+          <img data-original="/poster.jpg" />
+        </div>
+        <div class="myui-content__detail">
+          <h1 class="title">独播剧</h1>
+          <p>年份：2025</p>
+          <p>地区：大陆</p>
+          <p>导演：张三</p>
+          <p>主演：李四</p>
+        </div>
+        <span class="data">一段剧情简介</span>
+        <a href="/vodplay/100-1-1.html">第1集</a>
+        <a href="/vodplay/100-1-2.html">第2集</a>
+        """
+        result = self.spider._parse_detail_page(html, "https://www.dbku.tv/voddetail/100.html")
+        vod = result["list"][0]
+        self.assertEqual(vod["vod_name"], "独播剧")
+        self.assertEqual(vod["vod_year"], "2025")
+        self.assertEqual(vod["vod_play_from"], "独播库")
+        self.assertIn("第1集$https://www.dbku.tv/vodplay/100-1-1.html", vod["vod_play_url"])
+
+    @patch.object(Spider, "_request_html")
+    def test_detail_content_reads_from_vod_id_url(self, mock_request_html):
+        mock_request_html.return_value = """
+        <h1 class="title">详情影片</h1>
+        <a href="/vodplay/200-1-1.html">第1集</a>
+        """
+        result = self.spider.detailContent(["https://www.dbku.tv/voddetail/200.html"])
+        self.assertEqual(result["list"][0]["vod_id"], "https://www.dbku.tv/voddetail/200.html")
+        self.assertEqual(result["list"][0]["vod_name"], "详情影片")
+
 
 if __name__ == "__main__":
     unittest.main()
