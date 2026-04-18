@@ -246,3 +246,31 @@ class Spider(BaseSpider):
             return raw
         except Exception:
             return raw
+
+    def _build_player_headers(self, referer):
+        return {
+            "User-Agent": self.headers["User-Agent"],
+            "Referer": referer,
+        }
+
+    def playerContent(self, flag, id, vipFlags):
+        current = id
+        for _ in range(3):
+            html = self._request_html(current, referer=self.host)
+            data = self._parse_player_data(html)
+            if not data:
+                return {"parse": 0, "playUrl": "", "url": ""}
+            decoded = self._decode_play_url_by_encrypt(data.get("url", ""), data.get("encrypt", 0))
+            play_url = self._build_url(decoded)
+            if not play_url:
+                return {"parse": 0, "playUrl": "", "url": ""}
+            if self.host in play_url and "/vodplay/" in play_url and play_url != current:
+                current = play_url
+                continue
+            return {
+                "parse": 0,
+                "playUrl": "",
+                "url": play_url,
+                "header": self._build_player_headers(current),
+            }
+        return {"parse": 0, "playUrl": "", "url": ""}

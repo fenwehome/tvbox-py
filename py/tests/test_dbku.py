@@ -155,6 +155,28 @@ class TestDBKUSpider(unittest.TestCase):
             "https://video.example/trimmed.m3u8",
         )
 
+    @patch.object(Spider, "_request_html")
+    def test_player_content_returns_decoded_direct_url(self, mock_request_html):
+        mock_request_html.return_value = """
+        <script>
+        var player_data = {"url":"https://video.example/final.m3u8","encrypt":"0"};
+        </script>
+        """
+        result = self.spider.playerContent("独播库", "https://www.dbku.tv/vodplay/100-1-1.html", {})
+        self.assertEqual(result["parse"], 0)
+        self.assertEqual(result["url"], "https://video.example/final.m3u8")
+        self.assertEqual(result["header"]["Referer"], "https://www.dbku.tv/vodplay/100-1-1.html")
+
+    @patch.object(Spider, "_request_html")
+    def test_player_content_follows_internal_jump(self, mock_request_html):
+        mock_request_html.side_effect = [
+            '<script>var player_data = {"url":"/vodplay/100-1-2.html","encrypt":"0"};</script>',
+            '<script>var player_data = {"url":"https://video.example/jump-final.m3u8","encrypt":"0"};</script>',
+        ]
+        result = self.spider.playerContent("独播库", "https://www.dbku.tv/vodplay/100-1-1.html", {})
+        self.assertEqual(result["parse"], 0)
+        self.assertEqual(result["url"], "https://video.example/jump-final.m3u8")
+
 
 if __name__ == "__main__":
     unittest.main()
