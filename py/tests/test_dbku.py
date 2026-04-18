@@ -1,6 +1,7 @@
 import unittest
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,6 +38,62 @@ class TestDBKUSpider(unittest.TestCase):
                 }
             ],
         )
+
+    @patch.object(Spider, "fetch")
+    def test_request_html_uses_dbku_headers(self, mock_fetch):
+        class FakeResponse:
+            def __init__(self, text):
+                self.text = text
+                self.status_code = 200
+                self.encoding = "utf-8"
+
+        mock_fetch.return_value = FakeResponse("<html><body>ok</body></html>")
+        html = self.spider._request_html("/vodtype/1--------1---.html", expect_xpath="//body")
+        self.assertIn("ok", html)
+        called_headers = mock_fetch.call_args.kwargs["headers"]
+        self.assertEqual(called_headers["Referer"], "https://www.dbku.tv")
+        self.assertEqual(called_headers["Origin"], "https://www.dbku.tv")
+
+    @patch.object(Spider, "_request_html")
+    def test_category_content_builds_page_result(self, mock_request_html):
+        mock_request_html.return_value = """
+        <div class="myui-vodlist__box">
+          <a href="/voddetail/456.html" title="分类影片" data-original="/cover.jpg"></a>
+          <span class="pic-text">HD</span>
+        </div>
+        """
+        result = self.spider.categoryContent("movie", "2", False, {})
+        self.assertEqual(result["page"], 2)
+        self.assertEqual(result["list"][0]["vod_name"], "分类影片")
+        self.assertEqual(result["list"][0]["vod_pic"], "https://www.dbku.tv/cover.jpg")
+
+    def test_parse_search_cards_prefers_search_list_container(self):
+        html = """
+        <div id="searchList">
+          <div class="myui-vodlist__box">
+            <a href="/voddetail/789.html" title="搜索命中" data-original="/search.jpg"></a>
+          </div>
+        </div>
+        <div class="myui-vodlist__box">
+          <a href="/voddetail/999.html" title="回退结果" data-original="/fallback.jpg"></a>
+        </div>
+        """
+        results = self.spider._parse_search_cards(html)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["vod_name"], "搜索命中")
+
+    @patch.object(Spider, "_request_html")
+    def test_search_content_reuses_search_parser(self, mock_request_html):
+        mock_request_html.return_value = """
+        <div id="searchList">
+          <div class="myui-vodlist__box">
+            <a href="/voddetail/321.html" title="搜索影片" data-original="/search.jpg"></a>
+          </div>
+        </div>
+        """
+        result = self.spider.searchContent("繁花", False, "1")
+        self.assertEqual(result["list"][0]["vod_id"], "https://www.dbku.tv/voddetail/321.html")
+        self.assertEqual(result["list"][0]["vod_name"], "搜索影片")
 
 
 if __name__ == "__main__":
