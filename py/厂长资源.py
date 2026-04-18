@@ -96,6 +96,22 @@ class Spider(BaseSpider):
             raise last_error
         return "", self.current_host
 
+    def _normalize_url(self, value, host):
+        value = (value or "").strip()
+        if not value:
+            return ""
+        if value.startswith(("http://", "https://")):
+            return value
+        return urljoin(host, value)
+
+    def _extract_meta_value(self, root, labels):
+        for text in root.xpath("//li/text()"):
+            clean = text.strip()
+            for label in labels:
+                if clean.startswith(label):
+                    return clean.split("：", 1)[-1].strip()
+        return ""
+
     def _page_result(self, items, pg):
         page = int(pg)
         pagecount = page + 1 if items else page
@@ -150,11 +166,59 @@ class Spider(BaseSpider):
 
         return results
 
+    def _parse_detail_page(self, html, host, vod_id):
+        root = self.html(html)
+        title = ((root.xpath("//h1/text()") or [""])[0]).strip()
+        pic = ((root.xpath("//img[@src][1]/@src") or [""])[0]).strip()
+        content = "".join(root.xpath("//*[contains(@class,'yp_context')][1]//text()")).strip()
+
+        direct = []
+        for anchor in root.xpath("//*[contains(@class,'paly_list_btn')]//a[@href]"):
+            name = "".join(anchor.xpath(".//text()")).strip() or "播放"
+            href = self._normalize_url((anchor.xpath("./@href") or [""])[0], host)
+            if href:
+                direct.append(f"{name}${href}")
+
+        pan = []
+        for anchor in root.xpath("//*[contains(@class,'ypbt_down_list')]//a[@href]"):
+            name = "".join(anchor.xpath(".//text()")).strip() or "网盘资源"
+            href = self._normalize_url((anchor.xpath("./@href") or [""])[0], host)
+            if href:
+                pan.append(f"{name}${href}")
+
+        play_from = []
+        play_url = []
+        if direct:
+            play_from.append("厂长资源")
+            play_url.append("#".join(dict.fromkeys(direct)))
+        if pan:
+            play_from.append("网盘资源")
+            play_url.append("#".join(dict.fromkeys(pan)))
+
+        vod = {
+            "vod_id": vod_id,
+            "vod_name": title,
+            "vod_pic": self._normalize_url(pic, host),
+            "vod_year": self._extract_meta_value(root, ["年份："]),
+            "vod_area": self._extract_meta_value(root, ["地区："]),
+            "vod_actor": self._extract_meta_value(root, ["主演："]),
+            "vod_director": self._extract_meta_value(root, ["导演："]),
+            "vod_content": content,
+            "vod_play_from": "$$$".join(play_from),
+            "vod_play_url": "$$$".join(play_url),
+        }
+        return {"list": [vod]}
+
     def categoryContent(self, tid, pg, filter, extend):
         path = self.category_paths.get(tid, self.category_paths["movie"]).format(pg=pg)
         html, host = self._request_html(path, expect_xpath="//a[@href]")
         items = self._parse_media_cards(html, host)
         return self._page_result(items, pg)
+
+    def detailContent(self, ids):
+        vod_id = ids[0]
+        html, host = self._request_html(vod_id, expect_xpath="//h1|//*[contains(@class,'paly_list_btn')]")
+        return self._parse_detail_page(html, host, vod_id)
 
     def searchContent(self, key, quick, pg="1"):
         path = "/boss1O1?q={keyword}".format(keyword=quote(key))

@@ -103,6 +103,50 @@ class TestCZZYSpider(unittest.TestCase):
         self.assertEqual(result["list"][0]["vod_id"], "/movie/search-hit.html")
         self.assertEqual(result["list"][0]["vod_name"], "搜索影片")
 
+    def test_parse_detail_page_splits_direct_and_pan_sources(self):
+        html = """
+        <div class="dyxingq">
+          <h1>繁花</h1>
+          <img src="/poster.jpg" />
+          <div class="moviedteail_list">
+            <li>年份：2024</li>
+            <li>地区：中国大陆</li>
+            <li>导演：王家卫</li>
+            <li>主演：胡歌</li>
+          </div>
+          <div class="yp_context">一段剧情简介</div>
+        </div>
+        <div class="paly_list_btn">
+          <a href="/v_play/1.html">第1集</a>
+          <a href="/v_play/2.html">第2集</a>
+        </div>
+        <div class="ypbt_down_list">
+          <a href="https://www.alipan.com/s/demo">阿里云盘</a>
+        </div>
+        """
+
+        detail = self.spider._parse_detail_page(html, "https://www.czzy89.com", "/movie/fanhua.html")
+        vod = detail["list"][0]
+        self.assertEqual(vod["vod_name"], "繁花")
+        self.assertEqual(vod["vod_year"], "2024")
+        self.assertEqual(vod["vod_play_from"], "厂长资源$$$网盘资源")
+        self.assertIn("第1集$https://www.czzy89.com/v_play/1.html", vod["vod_play_url"])
+        self.assertIn("阿里云盘$https://www.alipan.com/s/demo", vod["vod_play_url"])
+
+    @patch.object(Spider, "_request_html")
+    def test_detail_content_reads_from_vod_id_path(self, mock_request_html):
+        mock_request_html.return_value = (
+            """
+            <h1>示例影片</h1>
+            <div class="paly_list_btn"><a href="/play/x.html">立即播放</a></div>
+            """,
+            "https://www.czzy89.com",
+        )
+
+        result = self.spider.detailContent(["/movie/example.html"])
+        self.assertEqual(result["list"][0]["vod_id"], "/movie/example.html")
+        self.assertEqual(result["list"][0]["vod_name"], "示例影片")
+
 
 if __name__ == "__main__":
     unittest.main()
