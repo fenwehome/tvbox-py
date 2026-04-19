@@ -54,6 +54,18 @@ class Spider(BaseSpider):
         except Exception:
             return {}
 
+    def _full_url(self, path):
+        raw = self._stringify(path).strip()
+        if not raw:
+            return ""
+        if raw.startswith(("http://", "https://")):
+            return raw
+        if raw.startswith("//"):
+            return "https:" + raw
+        if raw.startswith("/"):
+            return self.host + raw
+        return self.host + "/" + raw
+
     def _request_json(self, path, method="GET", data=None, headers=None):
         url = path if str(path).startswith("http") else self.host + path
         merged_headers = dict(self.headers)
@@ -284,7 +296,7 @@ class Spider(BaseSpider):
         try:
             return json.loads(base64.urlsafe_b64decode((raw + padding).encode("utf-8")).decode("utf-8"))
         except Exception:
-            return {"mediaId": raw, "playUrl": raw}
+            return {"mediaId": "", "playUrl": ""}
 
     def _build_play_sources(self, seasons, media_id):
         season_list = self._ensure_list(seasons)
@@ -352,3 +364,44 @@ class Spider(BaseSpider):
                 }
             )
         return result
+
+    def _find_play_url(self, seasons, target):
+        for season in self._ensure_list(seasons):
+            if target.get("seasonNo") is not None and int(season.get("seasonNo") or 0) != int(target.get("seasonNo")):
+                continue
+            for video in self._ensure_list(season.get("videoList")):
+                if target.get("videoId") is not None and int(video.get("id") or 0) == int(target.get("videoId")):
+                    return self._stringify(video.get("playUrl"))
+                if target.get("epNo") is not None and int(video.get("epNo") or 0) == int(target.get("epNo")):
+                    return self._stringify(video.get("playUrl"))
+
+        first_season = self._ensure_list(seasons)[0] if self._ensure_list(seasons) else {}
+        first_video = (
+            self._ensure_list(first_season.get("videoList"))[0]
+            if self._ensure_list(first_season.get("videoList"))
+            else {}
+        )
+        return self._stringify(first_video.get("playUrl"))
+
+    def playerContent(self, flag, id, vipFlags):
+        payload = self._decode_play_id(self._stringify(id).strip())
+        final_url = self._stringify(payload.get("playUrl"))
+        if not final_url and payload.get("mediaId"):
+            seasons = self._request_json(
+                f"/movie/media/video/list?mediaId={payload['mediaId']}&lineName=&resolutionCode="
+            ) or []
+            final_url = self._find_play_url(seasons, payload)
+
+        if not final_url:
+            return {"parse": 1, "jx": 1, "url": self._stringify(id), "header": dict(self.headers)}
+
+        return {
+            "parse": 0,
+            "jx": 0,
+            "url": self._full_url(final_url),
+            "header": {
+                "Referer": self.host + "/",
+                "Origin": self.host,
+                "User-Agent": self.headers["User-Agent"],
+            },
+        }

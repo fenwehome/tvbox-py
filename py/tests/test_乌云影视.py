@@ -272,6 +272,66 @@ class TestWooyunSpider(unittest.TestCase):
         self.assertEqual(vod["vod_play_from"], "乌云影视")
         self.assertIn("第2集 超前$", vod["vod_play_url"])
 
+    def test_find_play_url_matches_video_id_then_ep_no(self):
+        seasons = [
+            {
+                "seasonNo": 1,
+                "videoList": [
+                    {"id": 10, "epNo": 1, "playUrl": "/ep1.m3u8"},
+                    {"id": 11, "epNo": 2, "playUrl": "/ep2.m3u8"},
+                ],
+            }
+        ]
+        self.assertEqual(self.spider._find_play_url(seasons, {"seasonNo": 1, "videoId": 11}), "/ep2.m3u8")
+        self.assertEqual(self.spider._find_play_url(seasons, {"seasonNo": 1, "epNo": 1}), "/ep1.m3u8")
+
+    def test_player_content_returns_direct_url_when_payload_has_play_url(self):
+        play_id = self.spider._encode_play_payload(
+            {
+                "mediaId": "100",
+                "seasonNo": 1,
+                "epNo": 1,
+                "videoId": 10,
+                "playUrl": "/direct.m3u8",
+                "name": "第1集",
+            }
+        )
+        result = self.spider.playerContent("乌云影视", play_id, {})
+        self.assertEqual(result["parse"], 0)
+        self.assertEqual(result["jx"], 0)
+        self.assertEqual(result["url"], "https://wooyun.tv/direct.m3u8")
+        self.assertEqual(result["header"]["Referer"], "https://wooyun.tv/")
+
+    @patch.object(Spider, "_request_json")
+    def test_player_content_refetches_video_list_when_payload_missing_play_url(self, mock_request_json):
+        mock_request_json.return_value = [
+            {
+                "seasonNo": 1,
+                "videoList": [
+                    {"id": 77, "epNo": 3, "playUrl": "/refetched.m3u8"},
+                ],
+            }
+        ]
+        play_id = self.spider._encode_play_payload(
+            {
+                "mediaId": "100",
+                "seasonNo": 1,
+                "epNo": 3,
+                "videoId": 77,
+                "playUrl": "",
+                "name": "第3集",
+            }
+        )
+        result = self.spider.playerContent("乌云影视", play_id, {})
+        self.assertEqual(result["parse"], 0)
+        self.assertEqual(result["url"], "https://wooyun.tv/refetched.m3u8")
+
+    def test_player_content_falls_back_to_external_parse_when_no_url_found(self):
+        result = self.spider.playerContent("乌云影视", "raw-play-id", {})
+        self.assertEqual(result["parse"], 1)
+        self.assertEqual(result["jx"], 1)
+        self.assertEqual(result["url"], "raw-play-id")
+
 
 if __name__ == "__main__":
     unittest.main()
