@@ -109,6 +109,14 @@ class Spider(BaseSpider):
             return self.host + raw
         return self.host + "/" + raw
 
+    def _extract_site_path_id(self, href):
+        matched = re.search(r"/(detail/[^/?#]+)\.html", self._build_url(href))
+        return matched.group(1) if matched else ""
+
+    def _build_detail_request_url(self, vod_id):
+        value = self._stringify(vod_id).strip().strip("/")
+        return self._build_url(f"/{value}.html") if value else ""
+
     def _build_category_url(self, tid, pg, extend):
         values = dict(self.filter_def.get(str(tid), {"cateId": str(tid), "sort": "time"}))
         values.update(self._normalize_ext(extend))
@@ -150,7 +158,7 @@ class Spider(BaseSpider):
                 or ((card.xpath(".//img[1]/@src") or [""])[0]).strip()
             )
             remarks = self._clean_text("".join(card.xpath(".//*[contains(@class,'pic-text')][1]//text()")))
-            vod_id = self._build_url(href)
+            vod_id = self._extract_site_path_id(href)
             if not vod_id or not title or vod_id in seen:
                 continue
             seen.add(vod_id)
@@ -287,7 +295,9 @@ class Spider(BaseSpider):
             vod_id = self._stringify(raw).strip()
             if not vod_id:
                 continue
-            result["list"].append(self._parse_detail_page(self._request_html(vod_id), vod_id))
+            result["list"].append(
+                self._parse_detail_page(self._request_html(self._build_detail_request_url(vod_id)), vod_id)
+            )
         return result
 
     def _is_netdisk_url(self, value):

@@ -54,7 +54,7 @@ class TestDidaSpider(unittest.TestCase):
             cards,
             [
                 {
-                    "vod_id": "https://www.didahd.pro/detail/888.html",
+                    "vod_id": "detail/888",
                     "vod_name": "示例影片",
                     "vod_pic": "https://www.didahd.pro/cover.jpg",
                     "vod_remarks": "HD",
@@ -92,7 +92,7 @@ class TestDidaSpider(unittest.TestCase):
             mock_request_html.call_args.args[0],
             "https://www.didahd.pro/search/-------------.html?wd=%E7%B9%81%E8%8A%B1",
         )
-        self.assertEqual(result["list"][0]["vod_id"], "https://www.didahd.pro/detail/321.html")
+        self.assertEqual(result["list"][0]["vod_id"], "detail/321")
         self.assertEqual(result["pagecount"], 2)
 
     def test_extract_netdisk_groups_deduplicates_links_and_sorts_by_priority(self):
@@ -138,8 +138,9 @@ class TestDidaSpider(unittest.TestCase):
         </div>
         <ul class="myui-content__list"><li><a href="/play/111-1-1.html">正片</a></li></ul>
         """
-        result = self.spider.detailContent(["https://www.didahd.pro/detail/111.html"])
-        self.assertEqual(result["list"][0]["vod_id"], "https://www.didahd.pro/detail/111.html")
+        result = self.spider.detailContent(["detail/111"])
+        self.assertEqual(mock_request_html.call_args.args[0], "https://www.didahd.pro/detail/111.html")
+        self.assertEqual(result["list"][0]["vod_id"], "detail/111")
         self.assertEqual(result["list"][0]["vod_play_from"], "uc")
         self.assertEqual(result["list"][0]["vod_play_url"], "合集$https://drive.uc.cn/s/u1")
 
