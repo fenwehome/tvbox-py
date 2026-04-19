@@ -148,7 +148,7 @@ class TestJuZiTVSpider(unittest.TestCase):
         self.spider.init()
         result = self.spider.categoryContent("7", "2", False, {})
         self.assertEqual(result["page"], 2)
-        self.assertEqual(result["pagecount"], 3)
+        self.assertNotIn("pagecount", result)
         self.assertEqual(result["list"][0]["vod_id"], "21")
         self.assertEqual(result["list"][0]["vod_content"], "分类简介")
         payload = mock_post_api.call_args.args[1]
@@ -186,7 +186,7 @@ class TestJuZiTVSpider(unittest.TestCase):
         self.spider.init()
         result = self.spider.searchContent("繁花", False, "1")
         self.assertEqual(result["page"], 1)
-        self.assertEqual(result["pagecount"], 1)
+        self.assertNotIn("pagecount", result)
         self.assertEqual(result["list"][0]["vod_id"], "31")
         self.assertEqual(result["list"][0]["vod_remarks"], "评分：8.5")
         payload = mock_post_api.call_args.args[1]

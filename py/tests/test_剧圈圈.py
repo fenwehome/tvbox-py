@@ -83,7 +83,7 @@ class TestJuQuanQuanSpider(unittest.TestCase):
         result = self.spider.categoryContent("juji", "2", False, {})
         self.assertEqual(mock_request_html.call_args.args[0], "https://www.jqqzx.cc/type/juji/page/2.html")
         self.assertEqual(result["page"], 2)
-        self.assertEqual(result["pagecount"], 3)
+        self.assertNotIn("pagecount", result)
         self.assertEqual(result["list"][0]["vod_id"], "vod/456")
 
     @patch.object(Spider, "_request_html")
@@ -95,7 +95,7 @@ class TestJuQuanQuanSpider(unittest.TestCase):
             "https://www.jqqzx.cc/index.php/ajax/suggest?mid=1&wd=%E7%B9%81%E8%8A%B1",
         )
         self.assertEqual(result["list"][0]["vod_id"], "vod/777")
-        self.assertEqual(result["pagecount"], 1)
+        self.assertNotIn("pagecount", result)
 
     def test_parse_detail_page_extracts_metadata_and_playlists(self):
         html = """

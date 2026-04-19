@@ -186,10 +186,10 @@ class Spider(BaseSpider):
         page = int(pg)
         keyword = self._stringify(key).strip()
         if not keyword:
-            return {"page": page, "pagecount": 0, "total": 0, "list": []}
+            return {"page": page, "total": 0, "list": []}
         url = f"{self.host}/search/-------------.html?wd={quote(keyword)}"
         items = self._parse_cards(self._request_html(url))
-        return {"page": page, "pagecount": page + 1 if items else page, "total": len(items), "list": items}
+        return {"page": page, "total": len(items), "list": items}
 
     def _extract_detail_field(self, root, label, joiner=""):
         if root is None:

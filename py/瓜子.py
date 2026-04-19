@@ -142,7 +142,6 @@ class Spider(Spider):
         return {
             'list': videos,
             'page': int(pg),
-            'pagecount': 9999,
             'limit': 30,
             'total': 999999
         }
@@ -248,7 +247,6 @@ class Spider(Spider):
         return {
             'list': videos,
             'page': int(pg),
-            'pagecount': 9999,
             'limit': 30,
             'total': 999999
         }

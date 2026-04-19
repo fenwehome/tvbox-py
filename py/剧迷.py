@@ -317,11 +317,9 @@ class Spider(BaseSpider):
         raw_items = self._extract_cards(html)
         items = self._refine_search_results(raw_items, key)
         page = int(pg)
-        pagecount = page + 1 if len(raw_items) >= 20 else page
         return {
             "list": items,
             "page": page,
-            "pagecount": pagecount,
             "limit": len(items),
             "total": len(items),
         }

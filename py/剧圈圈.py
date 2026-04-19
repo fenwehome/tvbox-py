@@ -133,7 +133,6 @@ class Spider(BaseSpider):
         items = self._parse_cards(self._request_html(self._build_url(f"/type/{tid}/page/{page}.html")))
         return {
             "page": page,
-            "pagecount": page + 1 if items else page,
             "total": page * len(items) + (1 if items else 0),
             "list": items,
         }
@@ -142,11 +141,11 @@ class Spider(BaseSpider):
         page = int(pg)
         keyword = self._clean_text(key)
         if not keyword:
-            return {"page": page, "pagecount": 1, "total": 0, "list": []}
+            return {"page": page, "total": 0, "list": []}
         items = self._parse_search_list(
             self._request_html(self._build_url(f"/index.php/ajax/suggest?mid=1&wd={quote(keyword)}"))
         )
-        return {"page": page, "pagecount": 1, "total": len(items), "list": items}
+        return {"page": page, "total": len(items), "list": items}
 
     def _parse_info_items(self, root):
         info = {}

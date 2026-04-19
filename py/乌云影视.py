@@ -1,7 +1,6 @@
 # coding=utf-8
 import base64
 import json
-import math
 import sys
 
 from base.spider import Spider as BaseSpider
@@ -259,14 +258,13 @@ class Spider(BaseSpider):
         ) or {}
         records = [self._map_vod(item) for item in self._ensure_list(data.get("records"))]
         total = int(data.get("total") or 0)
-        pagecount = int(data.get("pages") or (math.ceil(total / self.page_size) if total else (page if records else 0)))
-        return {"page": page, "pagecount": pagecount, "limit": self.page_size, "total": total, "list": records}
+        return {"page": page, "limit": self.page_size, "total": total, "list": records}
 
     def searchContent(self, key, quick, pg="1"):
         page = int(pg)
         keyword = self._stringify(key).strip()
         if not keyword:
-            return {"page": page, "pagecount": 0, "total": 0, "list": []}
+            return {"page": page, "total": 0, "list": []}
 
         data = self._request_json(
             "/movie/media/search",
@@ -283,8 +281,7 @@ class Spider(BaseSpider):
         ) or {}
         records = [self._map_vod(item) for item in self._ensure_list(data.get("records"))]
         total = int(data.get("total") or 0)
-        pagecount = int(data.get("pages") or (math.ceil(total / self.page_size) if total else (page if records else 0)))
-        return {"page": page, "pagecount": pagecount, "total": total, "list": records}
+        return {"page": page, "total": total, "list": records}
 
     def _encode_play_payload(self, payload):
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")

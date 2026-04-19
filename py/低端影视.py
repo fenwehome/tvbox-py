@@ -240,7 +240,7 @@ class Spider(BaseSpider):
         page = int(pg)
         keyword = self._stringify(key).strip()
         if not keyword:
-            return {"page": page, "pagecount": 0, "total": 0, "list": []}
+            return {"page": page, "total": 0, "list": []}
         html = self._request_html(
             self.host + "/search",
             method="POST",
@@ -253,7 +253,7 @@ class Spider(BaseSpider):
         )
         if not items:
             items = self._parse_movie_cards(html)
-        return {"page": page, "pagecount": page + 1 if items else page, "total": len(items), "list": items}
+        return {"page": page, "total": len(items), "list": items}
 
     def _extract_switch_sources(self, html):
         root = self.html(html)

@@ -175,10 +175,9 @@ class Spider(BaseSpider):
         response = self._post_api("/v1/api/search/queryNow", payload)
         data = response.get("data", {})
         nextVal = data.get("nextVal", '')
-        if len(self.next) == page + 1:
-            self.next.append(nextVal)
-        else:
-            self.next[page + 1] = nextVal
+        while len(self.next) <= page + 1:
+            self.next.append("")
+        self.next[page + 1] = nextVal
         items = [self._map_video_item(item) for item in data.get("items", []) if isinstance(item, dict)]
         return self._page_result(items, pg, data.get("hasNext") == 1)
 

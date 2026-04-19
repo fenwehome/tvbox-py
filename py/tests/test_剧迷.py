@@ -78,7 +78,7 @@ class TestGimySpider(unittest.TestCase):
         result = self.spider.categoryContent("2", "2", False, {"by": "hits"})
         self.assertEqual(mock_request_html.call_args.args[0], "https://gimyai.tw/genre/2.html?page=2&by=hits")
         self.assertEqual(result["page"], 2)
-        self.assertEqual(result["pagecount"], 2)
+        self.assertNotIn("pagecount", result)
         self.assertEqual(result["list"][0]["vod_name"], "分类影片")
 
     def test_parse_detail_page_extracts_meta_and_playlists(self):
@@ -161,7 +161,7 @@ class TestGimySpider(unittest.TestCase):
         result = self.spider.searchContent("斗罗大陆", False, "1")
         self.assertEqual([item["vod_id"] for item in result["list"]], ["11"])
         self.assertEqual(result["page"], 1)
-        self.assertEqual(result["pagecount"], 1)
+        self.assertNotIn("pagecount", result)
 
     def test_extract_player_data_reads_json_block(self):
         html = '<script>var player_data = {"url":"https://video.example/direct.m3u8","encrypt":"0","from":"gimy"};</script>'

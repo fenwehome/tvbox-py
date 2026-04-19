@@ -75,7 +75,7 @@ class TestDDYSSpider(unittest.TestCase):
         result = self.spider.categoryContent("series", "2", False, {"area": "/region/japan"})
         self.assertEqual(mock_request_html.call_args.args[0], "https://ddys.io/series/region/japan/page/2")
         self.assertEqual(result["page"], 2)
-        self.assertEqual(result["pagecount"], 3)
+        self.assertNotIn("pagecount", result)
         self.assertEqual(result["limit"], 24)
         self.assertEqual(result["list"][0]["vod_name"], "示例剧")
 
@@ -138,7 +138,7 @@ class TestDDYSSpider(unittest.TestCase):
         self.assertEqual(kwargs["method"], "POST")
         self.assertEqual(kwargs["data"], "q=%E7%B9%81%E8%8A%B1")
         self.assertEqual(result["list"][0]["vod_id"], "anime/result")
-        self.assertEqual(result["pagecount"], 2)
+        self.assertNotIn("pagecount", result)
 
     def test_parse_detail_page_merges_direct_and_pan_sources(self):
         html = """

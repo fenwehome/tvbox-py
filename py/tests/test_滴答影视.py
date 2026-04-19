@@ -74,7 +74,7 @@ class TestDidaSpider(unittest.TestCase):
         result = self.spider.categoryContent("1", "2", False, {"area": "香港", "sort": "score"})
         self.assertEqual(mock_request_html.call_args.args[0], "https://www.didahd.pro/show/1-香港-score------2---")
         self.assertEqual(result["page"], 2)
-        self.assertEqual(result["pagecount"], 3)
+        self.assertNotIn("pagecount", result)
         self.assertEqual(result["limit"], 12)
         self.assertEqual(result["list"][0]["vod_name"], "分类影片")
 
@@ -93,7 +93,7 @@ class TestDidaSpider(unittest.TestCase):
             "https://www.didahd.pro/search/-------------.html?wd=%E7%B9%81%E8%8A%B1",
         )
         self.assertEqual(result["list"][0]["vod_id"], "detail/321")
-        self.assertEqual(result["pagecount"], 2)
+        self.assertNotIn("pagecount", result)
 
     def test_extract_netdisk_groups_deduplicates_links_and_sorts_by_priority(self):
         html = """

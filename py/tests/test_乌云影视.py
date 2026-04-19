@@ -170,14 +170,14 @@ class TestWooyunSpider(unittest.TestCase):
         self.assertEqual(kwargs["data"]["pageIndex"], "2")
         self.assertEqual(kwargs["data"]["sortCode"], "latest")
         self.assertEqual(result["page"], 2)
-        self.assertEqual(result["pagecount"], 2)
+        self.assertNotIn("pagecount", result)
         self.assertEqual(result["limit"], 24)
         self.assertEqual(result["total"], 30)
 
     @patch.object(Spider, "_request_json")
     def test_search_content_returns_empty_result_for_blank_keyword(self, mock_request_json):
         result = self.spider.searchContent("", False, "1")
-        self.assertEqual(result, {"page": 1, "pagecount": 0, "total": 0, "list": []})
+        self.assertEqual(result, {"page": 1, "total": 0, "list": []})
         mock_request_json.assert_not_called()
 
     @patch.object(Spider, "_request_json")
