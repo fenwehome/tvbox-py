@@ -170,9 +170,8 @@ class Spider(BaseSpider):
         return {
             "list": items,
             "page": page,
-            "pagecount": page + 1 if items else page,
             "limit": 12,
-            "total": page * 12 + len(items),
+            "total": page * 30 + len(items),
         }
 
     def searchContent(self, key, quick, pg="1"):
@@ -210,6 +209,20 @@ class Spider(BaseSpider):
             return "xunlei"
         return value or "netdisk"
 
+    def _normalize_disk_name_from_url(self, value):
+        text = self._stringify(value).strip().lower()
+        if "pan.baidu.com" in text:
+            return "baidu"
+        if "pan.quark.cn" in text:
+            return "quark"
+        if "drive.uc.cn" in text:
+            return "uc"
+        if "alipan.com" in text or "aliyundrive.com" in text:
+            return "aliyun"
+        if "pan.xunlei.com" in text:
+            return "xunlei"
+        return ""
+
     def _disk_priority(self, name):
         order = {"baidu": 1, "quark": 2, "uc": 3, "aliyun": 4, "xunlei": 5}
         return order.get(name, 999)
@@ -222,11 +235,11 @@ class Spider(BaseSpider):
         order_seen = []
         for row in root.xpath("//*[contains(@class,'text-muted') and contains(@class,'col-pd')]"):
             raw_name = self._clean_text("".join(row.xpath(".//b[1]//text()"))).replace("：", "")
-            disk_name = self._normalize_disk_name(raw_name)
             href = ((row.xpath(".//a[@href][1]/@href") or [""])[0]).strip()
-            title = self._clean_text("".join(row.xpath(".//a[1]//text()"))) or disk_name
-            if not href:
+            if not href or not self._is_netdisk_url(href):
                 continue
+            disk_name = self._normalize_disk_name_from_url(href) or self._normalize_disk_name(raw_name)
+            title = self._clean_text("".join(row.xpath(".//a[1]//text()"))) or disk_name
             if disk_name not in grouped:
                 grouped[disk_name] = []
                 order_seen.append(disk_name)

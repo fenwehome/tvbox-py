@@ -143,6 +143,33 @@ class TestDidaSpider(unittest.TestCase):
         self.assertEqual(result["list"][0]["vod_play_from"], "uc")
         self.assertEqual(result["list"][0]["vod_play_url"], "合集$https://drive.uc.cn/s/u1")
 
+    def test_extract_netdisk_groups_ignores_non_netdisk_external_links(self):
+        html = """
+        <div class="download-panel">
+          <p class="text-muted col-pd"><b>豆瓣：</b><a href="https://movie.douban.com/subject/37147970/">豆瓣详情</a></p>
+          <p class="text-muted col-pd"><b>夸克：</b><a href="https://pan.quark.cn/s/q1">查看</a></p>
+        </div>
+        """
+        self.assertEqual(
+            self.spider._extract_netdisk_groups(html),
+            [{"from": "quark", "urls": "查看$https://pan.quark.cn/s/q1"}],
+        )
+
+    def test_extract_netdisk_groups_prioritizes_domain_over_generic_label(self):
+        html = """
+        <div class="download-panel">
+          <p class="text-muted col-pd"><b>UC 网盘：</b><a href="https://drive.uc.cn/s/u1">UC合集</a></p>
+          <p class="text-muted col-pd"><b>资源链接：</b><a href="https://pan.baidu.com/s/b1">百度合集</a></p>
+        </div>
+        """
+        self.assertEqual(
+            self.spider._extract_netdisk_groups(html),
+            [
+                {"from": "baidu", "urls": "百度合集$https://pan.baidu.com/s/b1"},
+                {"from": "uc", "urls": "UC合集$https://drive.uc.cn/s/u1"},
+            ],
+        )
+
     def test_player_content_returns_direct_netdisk_link(self):
         result = self.spider.playerContent("quark", "https://pan.quark.cn/s/demo", {})
         self.assertEqual(result, {"parse": 0, "playUrl": "", "url": "https://pan.quark.cn/s/demo"})
