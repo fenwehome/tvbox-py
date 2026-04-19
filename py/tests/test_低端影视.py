@@ -205,6 +205,17 @@ class TestDDYSSpider(unittest.TestCase):
         self.assertEqual(baidu["url"], "https://pan.baidu.com/s/demo")
         self.assertEqual(xunlei["url"], "https://pan.xunlei.com/s/demo")
 
+    def test_home_content_keeps_reference_filter_values_for_movie(self):
+        movie_filters = self.spider.homeContent(False)["filters"]["movie"]
+        class_values = movie_filters[0]["value"]
+        area_values = movie_filters[1]["value"]
+        year_values = movie_filters[2]["value"]
+        sort_values = movie_filters[3]["value"]
+        self.assertIn({"n": "动作", "v": "/genre/action"}, class_values)
+        self.assertIn({"n": "中国", "v": "/region/china"}, area_values)
+        self.assertIn({"n": "2025", "v": "/year/2025"}, year_values)
+        self.assertEqual(sort_values[1], {"n": "评分", "v": "rating/"})
+
 
 if __name__ == "__main__":
     unittest.main()
