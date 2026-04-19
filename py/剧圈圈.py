@@ -144,3 +144,103 @@ class Spider(BaseSpider):
             self._request_html(self._build_url(f"/index.php/ajax/suggest?mid=1&wd={quote(keyword)}"))
         )
         return {"page": page, "pagecount": 1, "total": len(items), "list": items}
+
+    def _parse_info_items(self, root):
+        info = {}
+        for item in root.xpath("//*[contains(@class,'module-info-item')]"):
+            title = self._clean_text(
+                "".join(item.xpath(".//*[contains(@class,'module-info-item-title')][1]//text()"))
+            ).rstrip("：:")
+            if not title:
+                continue
+            links = [
+                self._clean_text("".join(node.xpath(".//text()")))
+                for node in item.xpath(".//*[contains(@class,'module-info-item-content')][1]//a")
+            ]
+            links = [value for value in links if value]
+            if links:
+                info[title] = " / ".join(links)
+                continue
+            info[title] = self._clean_text(
+                "".join(item.xpath(".//*[contains(@class,'module-info-item-content')][1]//text()"))
+            )
+        return info
+
+    def _parse_detail_page(self, html, vod_id):
+        root = self.html(html)
+        if root is None:
+            return {"list": []}
+        info = self._parse_info_items(root)
+        tab_names = []
+        for node in root.xpath("//*[@id='y-playList']//*[contains(@class,'module-tab-item')]"):
+            tab_names.append(
+                self._clean_text(
+                    (node.xpath("./@data-dropdown-value") or [""])[0]
+                    or "".join(node.xpath(".//span[1]//text()"))
+                    or "".join(node.xpath(".//text()"))
+                )
+            )
+        groups = []
+        for index, box in enumerate(root.xpath("//*[contains(@class,'his-tab-list')]")):
+            episodes = []
+            for anchor in box.xpath(".//a[contains(@class,'module-play-list-link') and @href]"):
+                play_id = self._encode_play_id((anchor.xpath("./@href") or [""])[0])
+                ep_name = self._clean_text(
+                    "".join(anchor.xpath(".//span[1]//text()")) or "".join(anchor.xpath(".//text()"))
+                )
+                if play_id and ep_name:
+                    episodes.append(f"{ep_name}${play_id}")
+            if episodes:
+                groups.append(
+                    {
+                        "from": tab_names[index] if index < len(tab_names) and tab_names[index] else f"线路{index + 1}",
+                        "urls": "#".join(episodes),
+                    }
+                )
+        type_name = " / ".join(
+            [
+                self._clean_text("".join(node.xpath(".//text()")))
+                for node in root.xpath("//*[contains(@class,'module-info-tag-link')]//a")
+                if self._clean_text("".join(node.xpath(".//text()")))
+            ]
+        )
+        pic = (
+            root.xpath(
+                "(//*[contains(@class,'module-item-pic')]//img/@data-original | "
+                "//*[contains(@class,'module-info-poster')]//img/@data-original | "
+                "//*[contains(@class,'module-item-pic')]//img/@src | "
+                "//*[contains(@class,'module-info-poster')]//img/@src)[1]"
+            )
+            or [""]
+        )[0]
+        return {
+            "list": [
+                {
+                    "vod_id": vod_id,
+                    "vod_name": self._clean_text(
+                        "".join(root.xpath("//*[contains(@class,'module-info-heading')]//h1[1]//text()"))
+                    ),
+                    "vod_pic": self._build_url(pic),
+                    "type_name": type_name,
+                    "vod_remarks": info.get("备注") or info.get("状态", ""),
+                    "vod_actor": info.get("主演", ""),
+                    "vod_director": info.get("导演", ""),
+                    "vod_content": self._clean_text(
+                        "".join(root.xpath("//*[contains(@class,'module-info-introduction-content')][1]//text()"))
+                    ),
+                    "vod_play_from": "$$$".join(group["from"] for group in groups),
+                    "vod_play_url": "$$$".join(group["urls"] for group in groups),
+                }
+            ]
+        }
+
+    def detailContent(self, ids):
+        result = {"list": []}
+        for raw_id in ids:
+            vod_id = str(raw_id or "").strip()
+            detail_url = self._decode_vod_id(vod_id)
+            if not detail_url:
+                continue
+            parsed = self._parse_detail_page(self._request_html(detail_url), vod_id)
+            result["list"].extend(parsed.get("list", []))
+        return result

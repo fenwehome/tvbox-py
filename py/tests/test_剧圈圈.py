@@ -96,6 +96,54 @@ class TestJuQuanQuanSpider(unittest.TestCase):
         self.assertEqual(result["list"][0]["vod_id"], "vod/777")
         self.assertEqual(result["pagecount"], 1)
 
+    def test_parse_detail_page_extracts_metadata_and_playlists(self):
+        html = """
+        <div class="module-info-heading"><h1>详情标题</h1></div>
+        <div class="module-info-poster"><img data-original="/poster.jpg" /></div>
+        <div class="module-info-item">
+          <div class="module-info-item-title">导演</div>
+          <div class="module-info-item-content"><a>导演甲</a></div>
+        </div>
+        <div class="module-info-item">
+          <div class="module-info-item-title">主演</div>
+          <div class="module-info-item-content"><a>演员甲</a><a>演员乙</a></div>
+        </div>
+        <div class="module-info-item">
+          <div class="module-info-item-title">备注</div>
+          <div class="module-info-item-content">更新至3集</div>
+        </div>
+        <div class="module-info-introduction-content">一段剧情简介</div>
+        <div class="module-info-tag-link"><a>古装</a><a>剧情</a></div>
+        <div id="y-playList">
+          <div class="module-tab-item" data-dropdown-value="线路A"></div>
+          <div class="module-tab-item" data-dropdown-value="线路B"></div>
+        </div>
+        <div class="his-tab-list">
+          <a class="module-play-list-link" href="/play/123-1-1.html"><span>第1集</span></a>
+          <a class="module-play-list-link" href="/play/123-1-2.html"><span>第2集</span></a>
+        </div>
+        <div class="his-tab-list">
+          <a class="module-play-list-link" href="/play/123-2-1.html"><span>正片</span></a>
+        </div>
+        """
+        result = self.spider._parse_detail_page(html, "vod/123")
+        vod = result["list"][0]
+        self.assertEqual(vod["vod_id"], "vod/123")
+        self.assertEqual(vod["vod_name"], "详情标题")
+        self.assertEqual(vod["vod_pic"], "https://www.jqqzx.cc/poster.jpg")
+        self.assertEqual(vod["type_name"], "古装 / 剧情")
+        self.assertEqual(vod["vod_director"], "导演甲")
+        self.assertEqual(vod["vod_actor"], "演员甲 / 演员乙")
+        self.assertEqual(vod["vod_content"], "一段剧情简介")
+        self.assertEqual(vod["vod_play_from"], "线路A$$$线路B")
+        self.assertEqual(vod["vod_play_url"], "第1集$play/123-1-1#第2集$play/123-1-2$$$正片$play/123-2-1")
+
+    @patch.object(Spider, "_request_html")
+    def test_detail_content_decodes_compact_vod_id(self, mock_request_html):
+        mock_request_html.return_value = '<div class="module-info-heading"><h1>详情标题</h1></div>'
+        self.spider.detailContent(["vod/321"])
+        self.assertEqual(mock_request_html.call_args.args[0], "https://www.jqqzx.cc/vod/321.html")
+
 
 if __name__ == "__main__":
     unittest.main()
