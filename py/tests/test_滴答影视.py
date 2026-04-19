@@ -95,6 +95,54 @@ class TestDidaSpider(unittest.TestCase):
         self.assertEqual(result["list"][0]["vod_id"], "https://www.didahd.pro/detail/321.html")
         self.assertEqual(result["pagecount"], 2)
 
+    def test_extract_netdisk_groups_deduplicates_links_and_sorts_by_priority(self):
+        html = """
+        <div class="myui-content__detail">
+          <h1 class="title">滴答示例</h1>
+          <p class="data"><span class="text-muted">分类：</span><a>动作</a></p>
+          <p class="data"><span class="text-muted">地区：</span><a>大陆</a></p>
+          <p class="data"><span class="text-muted">年份：</span><a>2025</a></p>
+          <p class="data"><span class="text-muted">导演：</span><a>导演甲</a></p>
+          <p class="data"><span class="text-muted">主演：</span><a>主演甲</a><a>主演乙</a></p>
+        </div>
+        <div class="myui-panel clearfix">
+          <p class="text-muted">剧情简介：一段剧情简介</p>
+        </div>
+        <div class="download-panel">
+          <p class="text-muted col-pd"><b>夸克：</b><a href="https://pan.quark.cn/s/q1">查看</a></p>
+          <p class="text-muted col-pd"><b>百度：</b><a href="https://pan.baidu.com/s/b1">合集</a></p>
+          <p class="text-muted col-pd"><b>夸克：</b><a href="https://pan.quark.cn/s/q1">一键复制</a></p>
+          <p class="text-muted col-pd"><b>迅雷：</b><a href="https://pan.xunlei.com/s/x1">迅雷资源</a></p>
+        </div>
+        """
+        vod = self.spider._parse_detail_page(html, "https://www.didahd.pro/detail/demo.html")
+        self.assertEqual(vod["vod_name"], "滴答示例")
+        self.assertEqual(vod["vod_year"], "2025")
+        self.assertEqual(vod["vod_area"], "大陆")
+        self.assertEqual(vod["vod_class"], "动作")
+        self.assertEqual(vod["vod_director"], "导演甲")
+        self.assertEqual(vod["vod_actor"], "主演甲,主演乙")
+        self.assertEqual(vod["vod_content"], "一段剧情简介")
+        self.assertEqual(vod["vod_play_from"], "baidu$$$quark$$$xunlei")
+        self.assertEqual(
+            vod["vod_play_url"],
+            "合集$https://pan.baidu.com/s/b1$$$查看$https://pan.quark.cn/s/q1$$$迅雷资源$https://pan.xunlei.com/s/x1",
+        )
+
+    @patch.object(Spider, "_request_html")
+    def test_detail_content_keeps_only_netdisk_sources(self, mock_request_html):
+        mock_request_html.return_value = """
+        <div class="myui-content__detail"><h1 class="title">详情标题</h1></div>
+        <div class="download-panel">
+          <p class="text-muted col-pd"><b>UC 网盘：</b><a href="https://drive.uc.cn/s/u1">合集</a></p>
+        </div>
+        <ul class="myui-content__list"><li><a href="/play/111-1-1.html">正片</a></li></ul>
+        """
+        result = self.spider.detailContent(["https://www.didahd.pro/detail/111.html"])
+        self.assertEqual(result["list"][0]["vod_id"], "https://www.didahd.pro/detail/111.html")
+        self.assertEqual(result["list"][0]["vod_play_from"], "uc")
+        self.assertEqual(result["list"][0]["vod_play_url"], "合集$https://drive.uc.cn/s/u1")
+
 
 if __name__ == "__main__":
     unittest.main()

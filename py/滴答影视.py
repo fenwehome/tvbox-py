@@ -179,3 +179,96 @@ class Spider(BaseSpider):
         url = f"{self.host}/search/-------------.html?wd={quote(keyword)}"
         items = self._parse_cards(self._request_html(url))
         return {"page": page, "pagecount": page + 1 if items else page, "total": len(items), "list": items}
+
+    def _extract_detail_field(self, root, label, joiner=""):
+        if root is None:
+            return ""
+        nodes = root.xpath(f'.//*[contains(@class,"data")][.//*[contains(normalize-space(.), "{label}：")]]')
+        if not nodes:
+            return ""
+        anchor_values = [self._clean_text(text) for text in nodes[0].xpath(".//a//text()") if self._clean_text(text)]
+        if anchor_values:
+            return joiner.join(anchor_values) if joiner else "".join(anchor_values)
+        text = self._clean_text("".join(nodes[0].xpath(".//text()")))
+        return text.split("：", 1)[-1].strip() if "：" in text else text
+
+    def _normalize_disk_name(self, text):
+        value = self._clean_text(text).lower()
+        if "百度" in value:
+            return "baidu"
+        if "夸克" in value:
+            return "quark"
+        if value.startswith("uc") or "uc网盘" in value or "uc 网盘" in value:
+            return "uc"
+        if "阿里" in value or "aliyun" in value:
+            return "aliyun"
+        if "迅雷" in value:
+            return "xunlei"
+        return value or "netdisk"
+
+    def _disk_priority(self, name):
+        order = {"baidu": 1, "quark": 2, "uc": 3, "aliyun": 4, "xunlei": 5}
+        return order.get(name, 999)
+
+    def _extract_netdisk_groups(self, html):
+        root = self.html(html)
+        if root is None:
+            return []
+        grouped = {}
+        order_seen = []
+        for row in root.xpath("//*[contains(@class,'text-muted') and contains(@class,'col-pd')]"):
+            raw_name = self._clean_text("".join(row.xpath(".//b[1]//text()"))).replace("：", "")
+            disk_name = self._normalize_disk_name(raw_name)
+            href = ((row.xpath(".//a[@href][1]/@href") or [""])[0]).strip()
+            title = self._clean_text("".join(row.xpath(".//a[1]//text()"))) or disk_name
+            if not href:
+                continue
+            if disk_name not in grouped:
+                grouped[disk_name] = []
+                order_seen.append(disk_name)
+            links = {item.split("$", 1)[1] for item in grouped[disk_name]}
+            if href not in links:
+                grouped[disk_name].append(f"{title}${href}")
+        names = sorted(order_seen, key=self._disk_priority)
+        return [{"from": name, "urls": "#".join(grouped[name])} for name in names if grouped[name]]
+
+    def _parse_detail_page(self, html, vod_id):
+        root = self.html(html)
+        if root is None:
+            return {"vod_id": vod_id, "vod_name": "", "vod_play_from": "", "vod_play_url": ""}
+        detail_root = (root.xpath("//*[contains(@class,'myui-content__detail')][1]") or [root])[0]
+        title = self._clean_text("".join(detail_root.xpath(".//*[contains(@class,'title')][1]//text()")))
+        pic = (
+            ((root.xpath("//*[contains(@class,'lazyload')][1]/@data-original") or [""])[0]).strip()
+            or ((root.xpath("//*[contains(@class,'myui-vodlist__thumb')]//img[1]/@src") or [""])[0]).strip()
+        )
+        content = ""
+        for node in root.xpath("//*[contains(@class,'text-muted')]"):
+            text = self._clean_text("".join(node.xpath(".//text()")))
+            if "剧情简介" in text:
+                content = text.replace("剧情简介：", "").strip()
+                break
+        groups = self._extract_netdisk_groups(html)
+        return {
+            "vod_id": vod_id,
+            "vod_name": title,
+            "vod_pic": self._build_url(pic),
+            "vod_content": content,
+            "vod_remarks": "",
+            "vod_year": self._extract_detail_field(detail_root, "年份"),
+            "vod_area": self._extract_detail_field(detail_root, "地区"),
+            "vod_class": self._extract_detail_field(detail_root, "分类"),
+            "vod_director": self._extract_detail_field(detail_root, "导演"),
+            "vod_actor": self._extract_detail_field(detail_root, "主演", joiner=","),
+            "vod_play_from": "$$$".join([item["from"] for item in groups]),
+            "vod_play_url": "$$$".join([item["urls"] for item in groups]),
+        }
+
+    def detailContent(self, ids):
+        result = {"list": []}
+        for raw in ids:
+            vod_id = self._stringify(raw).strip()
+            if not vod_id:
+                continue
+            result["list"].append(self._parse_detail_page(self._request_html(vod_id), vod_id))
+        return result
