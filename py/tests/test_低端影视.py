@@ -140,6 +140,51 @@ class TestDDYSSpider(unittest.TestCase):
         self.assertEqual(result["list"][0]["vod_id"], "https://ddys.io/anime/result/")
         self.assertEqual(result["pagecount"], 2)
 
+    def test_parse_detail_page_merges_direct_and_pan_sources(self):
+        html = """
+        <html>
+          <h1 class="text-xl md:text-3xl">低端示例<span class="block">DDYS Example</span></h1>
+          <img alt="低端示例" src="/poster-detail.jpg" />
+          <div class="text-xs md:text-sm text-gray-600 dark:text-gray-400">2025 · 日本 · 动画</div>
+          <div class="text-xs md:text-sm text-gray-700 dark:text-gray-300">导演：<span>导演甲</span></div>
+          <div class="text-xs md:text-sm text-gray-700 dark:text-gray-300">主演：<span>主演乙</span></div>
+          <div class="prose"><p>第一段简介。</p><p>第二段简介。</p></div>
+          <button onclick="switchSource(1, '第1集$/play/ep1#第2集$/play/ep2', 'mp4')">DDYS</button>
+          <div class="download-type-content" id="download-type-quark">
+            <button onclick="trackAndOpenResource(atob('aHR0cHM6Ly9wYW4ucXVhcmsuY24vcy9hYmMxMjM='))">夸克查看</button>
+          </div>
+          <div class="download-type-content" id="download-type-baidu">
+            <button onclick="trackAndOpenResource(atob('aHR0cHM6Ly9wYW4uYmFpZHUuY29tL3MvZGVtbw=='))">百度查看</button>
+          </div>
+        </html>
+        """
+        vod = self.spider._parse_detail_page(html, "https://ddys.io/anime/demo/")
+        self.assertEqual(vod["vod_name"], "低端示例")
+        self.assertEqual(vod["vod_pic"], "https://ddys.io/poster-detail.jpg")
+        self.assertEqual(vod["vod_year"], "2025")
+        self.assertEqual(vod["vod_area"], "日本")
+        self.assertEqual(vod["vod_class"], "动画")
+        self.assertEqual(vod["vod_director"], "导演甲")
+        self.assertEqual(vod["vod_actor"], "主演乙")
+        self.assertEqual(vod["vod_content"], "第一段简介。\n第二段简介。")
+        self.assertEqual(vod["vod_play_from"], "DDYS$$$quark$$$baidu")
+        self.assertIn("第2集$/play/ep2", vod["vod_play_url"])
+        self.assertIn("夸克查看$https://pan.quark.cn/s/abc123", vod["vod_play_url"])
+        self.assertIn("百度查看$https://pan.baidu.com/s/demo", vod["vod_play_url"])
+
+    @patch.object(Spider, "_request_html")
+    def test_detail_content_reads_detail_page_and_returns_single_vod(self, mock_request_html):
+        mock_request_html.return_value = """
+        <h1 class="text-xl md:text-3xl">详情标题</h1>
+        <button onclick="switchSource(1, '/play/detail-demo', 'mp4')">直连</button>
+        """
+        result = self.spider.detailContent(["https://ddys.io/movie/demo/"])
+        self.assertEqual(mock_request_html.call_args.args[0], "https://ddys.io/movie/demo/")
+        self.assertEqual(result["list"][0]["vod_id"], "https://ddys.io/movie/demo/")
+        self.assertEqual(result["list"][0]["vod_name"], "详情标题")
+        self.assertEqual(result["list"][0]["vod_play_from"], "直连")
+        self.assertEqual(result["list"][0]["vod_play_url"], "全集$/play/detail-demo")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,5 @@
 # coding=utf-8
+import base64
 import json
 import re
 import sys
@@ -176,3 +177,93 @@ class Spider(BaseSpider):
         if not items:
             items = self._parse_movie_cards(html)
         return {"page": page, "pagecount": page + 1 if items else page, "total": len(items), "list": items}
+
+    def _extract_switch_sources(self, html):
+        root = self.html(html)
+        if root is None:
+            return []
+        groups = []
+        for button in root.xpath("//button[contains(@onclick,'switchSource')]"):
+            onclick = (button.xpath("./@onclick") or [""])[0]
+            matched = re.search(r"switchSource\(\d+,\s*'([^']*)',\s*'[^']*'\)", onclick, re.S)
+            if not matched:
+                continue
+            name = self._clean_text("".join(button.xpath(".//text()"))) or self.name
+            payload = self._clean_text(matched.group(1))
+            if not payload:
+                continue
+            if "$" not in payload:
+                payload = f"全集${payload}"
+            groups.append({"from": name, "urls": payload})
+        return groups
+
+    def _extract_pan_sources(self, html):
+        root = self.html(html)
+        if root is None:
+            return []
+        groups = []
+        for panel in root.xpath("//*[contains(@class,'download-type-content')]"):
+            panel_id = ((panel.xpath("./@id") or [""])[0]).replace("download-type-", "").strip()
+            if panel_id not in ("quark", "xunlei", "baidu"):
+                continue
+            entries = []
+            for button in panel.xpath(".//button[@onclick]"):
+                onclick = (button.xpath("./@onclick") or [""])[0]
+                matched = re.search(r"atob\('([^']+)'\)", onclick)
+                if not matched:
+                    continue
+                try:
+                    link = base64.b64decode(matched.group(1)).decode("utf-8").strip()
+                except Exception:
+                    continue
+                title = self._clean_text("".join(button.xpath(".//text()"))) or panel_id
+                if link:
+                    entries.append(f"{title}${link}")
+            if entries:
+                groups.append({"from": panel_id, "urls": "#".join(dict.fromkeys(entries))})
+        return groups
+
+    def _parse_detail_page(self, html, vod_id):
+        root = self.html(html)
+        if root is None:
+            return {"vod_id": vod_id, "vod_name": "", "vod_play_from": "", "vod_play_url": ""}
+        title = self._clean_text("".join(root.xpath("//h1[1]/text()")))
+        pic = ((root.xpath("//img[@alt][1]/@src") or [""])[0]).strip()
+        meta = self._clean_text("".join(root.xpath("(//*[contains(@class,'text-gray-600')])[1]//text()")))
+        parts = [self._clean_text(item) for item in meta.split("·")] if meta else []
+        director = ""
+        actor = ""
+        for text in root.xpath("//*[contains(@class,'text-gray-700')]"):
+            joined = self._clean_text("".join(text.xpath(".//text()")))
+            if joined.startswith("导演："):
+                director = joined.split("：", 1)[-1].strip()
+            if joined.startswith("主演："):
+                actor = joined.split("：", 1)[-1].strip()
+        content = "\n".join(
+            [self._clean_text("".join(node.xpath(".//text()"))) for node in root.xpath("//*[contains(@class,'prose')]//p")]
+        ).strip()
+        play_groups = self._extract_switch_sources(html) + self._extract_pan_sources(html)
+        return {
+            "vod_id": vod_id,
+            "vod_name": title,
+            "vod_pic": self._build_url(pic),
+            "vod_content": content,
+            "vod_remarks": " · ".join([item for item in parts if item]),
+            "vod_year": parts[0] if len(parts) > 0 else "",
+            "vod_area": parts[1] if len(parts) > 1 else "",
+            "vod_class": parts[2] if len(parts) > 2 else "",
+            "vod_director": director,
+            "vod_actor": actor,
+            "vod_play_from": "$$$".join([item["from"] for item in play_groups]),
+            "vod_play_url": "$$$".join([item["urls"] for item in play_groups]),
+        }
+
+    def detailContent(self, ids):
+        result = {"list": []}
+        for raw_id in ids:
+            vod_id = self._stringify(raw_id).strip()
+            if not vod_id:
+                continue
+            vod = self._parse_detail_page(self._request_html(vod_id), vod_id)
+            result["list"].append(vod)
+        return result
