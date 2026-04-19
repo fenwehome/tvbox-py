@@ -252,7 +252,10 @@ class Spider(BaseSpider):
         request_headers = dict(self.headers)
         if headers:
             request_headers.update(headers)
-        response = self.fetch(target, headers=request_headers, data=data, timeout=10)
+        if data is None:
+            response = self.fetch(target, headers=request_headers, timeout=10)
+        else:
+            response = self.post(target, data=data, headers=request_headers, timeout=10)
         return {
             "body": response.text or "",
             "headers": getattr(response, "headers", {}) or {},

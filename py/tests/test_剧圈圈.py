@@ -148,6 +148,29 @@ class TestJuQuanQuanSpider(unittest.TestCase):
         html = '<script>var player_aaaa={"url":"https://video.example/direct.m3u8"};</script>'
         self.assertEqual(self.spider._extract_player_data(html)["url"], "https://video.example/direct.m3u8")
 
+    @patch.object(Spider, "post")
+    @patch.object(Spider, "fetch")
+    def test_request_with_headers_uses_get_without_data_and_post_with_data(self, mock_fetch, mock_post):
+        class MockResponse:
+            status_code = 200
+            text = "ok"
+            headers = {"set-cookie": ["foo=bar; Path=/"]}
+
+        mock_fetch.return_value = MockResponse()
+        mock_post.return_value = MockResponse()
+
+        get_result = self.spider._request_with_headers("https://www.jqqzx.cc/play/123-1-1.html")
+        post_result = self.spider._request_with_headers(
+            "https://www.jqqzx.cc/jx/api.php",
+            headers={"X-Requested-With": "XMLHttpRequest"},
+            data="vid=demo",
+        )
+
+        self.assertEqual(get_result["body"], "ok")
+        self.assertEqual(post_result["body"], "ok")
+        self.assertEqual(mock_fetch.call_count, 1)
+        self.assertEqual(mock_post.call_count, 1)
+
     @patch.object(Spider, "_request_with_headers")
     def test_player_content_returns_direct_media_url(self, mock_request_with_headers):
         mock_request_with_headers.return_value = {
