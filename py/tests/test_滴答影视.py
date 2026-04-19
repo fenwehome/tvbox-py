@@ -143,6 +143,32 @@ class TestDidaSpider(unittest.TestCase):
         self.assertEqual(result["list"][0]["vod_play_from"], "uc")
         self.assertEqual(result["list"][0]["vod_play_url"], "合集$https://drive.uc.cn/s/u1")
 
+    def test_player_content_returns_direct_netdisk_link(self):
+        result = self.spider.playerContent("quark", "https://pan.quark.cn/s/demo", {})
+        self.assertEqual(result, {"parse": 0, "playUrl": "", "url": "https://pan.quark.cn/s/demo"})
+
+    def test_player_content_supports_uc_baidu_xunlei_aliyun_links(self):
+        self.assertEqual(
+            self.spider.playerContent("uc", "https://drive.uc.cn/s/u1", {})["url"],
+            "https://drive.uc.cn/s/u1",
+        )
+        self.assertEqual(
+            self.spider.playerContent("baidu", "https://pan.baidu.com/s/b1", {})["url"],
+            "https://pan.baidu.com/s/b1",
+        )
+        self.assertEqual(
+            self.spider.playerContent("xunlei", "https://pan.xunlei.com/s/x1", {})["url"],
+            "https://pan.xunlei.com/s/x1",
+        )
+        self.assertEqual(
+            self.spider.playerContent("aliyun", "https://www.alipan.com/s/a1", {})["url"],
+            "https://www.alipan.com/s/a1",
+        )
+
+    def test_player_content_returns_empty_for_non_netdisk_input(self):
+        result = self.spider.playerContent("播放线路", "/play/111-1-1.html", {})
+        self.assertEqual(result, {"parse": 0, "playUrl": "", "url": ""})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -272,3 +272,23 @@ class Spider(BaseSpider):
                 continue
             result["list"].append(self._parse_detail_page(self._request_html(vod_id), vod_id))
         return result
+
+    def _is_netdisk_url(self, value):
+        text = self._stringify(value).strip().lower()
+        return any(
+            token in text
+            for token in [
+                "drive.uc.cn",
+                "pan.quark.cn",
+                "pan.baidu.com",
+                "pan.xunlei.com",
+                "alipan.com",
+                "aliyundrive.com",
+            ]
+        )
+
+    def playerContent(self, flag, id, vipFlags):
+        raw = self._stringify(id).strip()
+        if self._is_netdisk_url(raw):
+            return {"parse": 0, "playUrl": "", "url": raw}
+        return {"parse": 0, "playUrl": "", "url": ""}
