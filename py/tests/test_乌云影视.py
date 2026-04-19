@@ -1,6 +1,7 @@
 import unittest
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -107,6 +108,90 @@ class TestWooyunSpider(unittest.TestCase):
         self.assertEqual(body["pageIndex"], "3")
         self.assertEqual(body["sortCode"], "hot")
         self.assertEqual(body["topCode"], "movie")
+
+    def test_extract_home_list_deduplicates_media_resources(self):
+        home_blocks = {
+            "records": [
+                {
+                    "mediaResources": [
+                        {"id": 1, "title": "影片A", "posterUrl": "/a.jpg"},
+                        {"id": 1, "title": "影片A", "posterUrl": "/a.jpg"},
+                    ]
+                },
+                {
+                    "mediaResources": [
+                        {"id": 2, "title": "影片B", "posterUrlS3": "https://img.example/b.jpg"},
+                    ]
+                },
+            ]
+        }
+        items = self.spider._extract_home_list(home_blocks)
+        self.assertEqual([item["id"] for item in items], ["1", "2"])
+
+    def test_map_vod_picks_expected_fields(self):
+        item = {
+            "id": 7,
+            "title": "示例片",
+            "posterUrl": "/poster.jpg",
+            "mediaType": {"code": "movie", "name": "电影"},
+            "episodeStatus": "更新至4集",
+            "releaseYear": "2026",
+            "rating": "8.8",
+            "actors": ["甲", "乙"],
+            "directors": ["丙"],
+        }
+        vod = self.spider._map_vod(item)
+        self.assertEqual(vod["vod_id"], "7")
+        self.assertEqual(vod["vod_pic"], "/poster.jpg")
+        self.assertEqual(vod["vod_actor"], "甲/乙")
+        self.assertEqual(vod["vod_director"], "丙")
+
+    @patch.object(Spider, "_request_json")
+    def test_home_video_content_reads_home_blocks(self, mock_request_json):
+        mock_request_json.return_value = {
+            "records": [
+                {"mediaResources": [{"id": 1, "title": "首页片", "posterUrl": "/a.jpg"}]}
+            ]
+        }
+        result = self.spider.homeVideoContent()
+        self.assertEqual(result["list"][0]["vod_id"], "1")
+        self.assertEqual(result["list"][0]["vod_name"], "首页片")
+
+    @patch.object(Spider, "_request_json")
+    def test_category_content_posts_search_body_and_returns_page_data(self, mock_request_json):
+        mock_request_json.return_value = {
+            "records": [{"id": 9, "title": "分类片", "posterUrl": "/cate.jpg"}],
+            "total": 30,
+            "pages": 2,
+        }
+        result = self.spider.categoryContent("movie", "2", False, {"sort": "latest"})
+        kwargs = mock_request_json.call_args.kwargs
+        self.assertEqual(kwargs["method"], "POST")
+        self.assertEqual(kwargs["data"]["pageIndex"], "2")
+        self.assertEqual(kwargs["data"]["sortCode"], "latest")
+        self.assertEqual(result["page"], 2)
+        self.assertEqual(result["pagecount"], 2)
+        self.assertEqual(result["limit"], 24)
+        self.assertEqual(result["total"], 30)
+
+    @patch.object(Spider, "_request_json")
+    def test_search_content_returns_empty_result_for_blank_keyword(self, mock_request_json):
+        result = self.spider.searchContent("", False, "1")
+        self.assertEqual(result, {"page": 1, "pagecount": 0, "total": 0, "list": []})
+        mock_request_json.assert_not_called()
+
+    @patch.object(Spider, "_request_json")
+    def test_search_content_posts_keyword_body(self, mock_request_json):
+        mock_request_json.return_value = {
+            "records": [{"id": 15, "title": "搜索片", "posterUrl": "/search.jpg"}],
+            "total": 1,
+            "pages": 1,
+        }
+        result = self.spider.searchContent("繁花", False, "1")
+        body = mock_request_json.call_args.kwargs["data"]
+        self.assertEqual(body["searchKey"], "繁花")
+        self.assertEqual(body["topCode"], "")
+        self.assertEqual(result["list"][0]["vod_id"], "15")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 # coding=utf-8
 import json
+import math
 import sys
 
 from base.spider import Spider as BaseSpider
@@ -184,7 +185,90 @@ class Spider(BaseSpider):
             "topCode": self._map_top_code(category_id),
         }
 
+    def _join_text(self, value):
+        return "/".join([self._stringify(item) for item in self._ensure_list(value) if self._stringify(item)])
+
+    def _pick_poster(self, item):
+        return self._stringify(
+            item.get("posterUrlS3") or item.get("posterUrl") or item.get("thumbUrlS3") or item.get("thumbUrl")
+        )
+
+    def _extract_home_list(self, home_blocks):
+        if isinstance(home_blocks, dict):
+            blocks = self._ensure_list(home_blocks.get("records"))
+        else:
+            blocks = self._ensure_list(home_blocks)
+        seen = set()
+        items = []
+        for block in blocks:
+            for item in self._ensure_list(block.get("mediaResources")):
+                vod_id = self._stringify(item.get("id"))
+                if not vod_id or vod_id in seen:
+                    continue
+                seen.add(vod_id)
+                copied = dict(item)
+                copied["id"] = vod_id
+                items.append(copied)
+        return items
+
+    def _map_vod(self, item):
+        media_type = item.get("mediaType") or {}
+        return {
+            "vod_id": self._stringify(item.get("id")),
+            "vod_name": self._stringify(item.get("title")),
+            "vod_pic": self._pick_poster(item),
+            "type_id": self._stringify(media_type.get("code")),
+            "type_name": self._stringify(media_type.get("name")),
+            "vod_remarks": self._stringify(item.get("episodeStatus") or item.get("remark")),
+            "vod_year": self._stringify(item.get("releaseYear")),
+            "vod_douban_score": self._stringify(item.get("rating")),
+            "vod_actor": self._join_text(item.get("actors")),
+            "vod_director": self._join_text(item.get("directors")),
+        }
+
     def homeContent(self, filter):
         menu = self._request_json("/movie/category/menu")
         classes = self._build_classes(menu)
         return {"class": classes, "filters": self._build_filters(menu, classes)}
+
+    def homeVideoContent(self):
+        data = self._request_json(f"/movie/media/home/custom/classify/1/3?limit={self.home_limit}")
+        items = self._extract_home_list(data)[: self.home_limit]
+        return {"list": [self._map_vod(item) for item in items]}
+
+    def categoryContent(self, tid, pg, filter, extend):
+        page = int(pg)
+        data = self._request_json(
+            "/movie/media/search",
+            method="POST",
+            data=self._build_category_body(self._stringify(tid or "movie"), page, extend),
+            headers={"Content-Type": "application/json"},
+        ) or {}
+        records = [self._map_vod(item) for item in self._ensure_list(data.get("records"))]
+        total = int(data.get("total") or 0)
+        pagecount = int(data.get("pages") or (math.ceil(total / self.page_size) if total else (page if records else 0)))
+        return {"page": page, "pagecount": pagecount, "limit": self.page_size, "total": total, "list": records}
+
+    def searchContent(self, key, quick, pg="1"):
+        page = int(pg)
+        keyword = self._stringify(key).strip()
+        if not keyword:
+            return {"page": page, "pagecount": 0, "total": 0, "list": []}
+
+        data = self._request_json(
+            "/movie/media/search",
+            method="POST",
+            data={
+                "menuCodeList": [],
+                "pageIndex": self._stringify(page),
+                "pageSize": self.page_size,
+                "searchKey": keyword,
+                "sortCode": "",
+                "topCode": "",
+            },
+            headers={"Content-Type": "application/json"},
+        ) or {}
+        records = [self._map_vod(item) for item in self._ensure_list(data.get("records"))]
+        total = int(data.get("total") or 0)
+        pagecount = int(data.get("pages") or (math.ceil(total / self.page_size) if total else (page if records else 0)))
+        return {"page": page, "pagecount": pagecount, "total": total, "list": records}
