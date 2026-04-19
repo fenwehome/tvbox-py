@@ -27,6 +27,7 @@ class Spider(BaseSpider):
         self.version = "1.0.1"
         self.version_code = 1000
         self.inited = False
+        self.next = ["", ""]
 
     def init(self, extend=""):
         if self.inited:
@@ -150,20 +151,19 @@ class Spider(BaseSpider):
 
     def _page_result(self, items, pg, has_next):
         page = int(pg)
-        pagecount = page + 1 if items and has_next else page
         return {
             "list": items,
             "page": page,
-            "pagecount": pagecount,
             "limit": len(items),
-            "total": pagecount * max(len(items), 1),
+            "total": page * 30 + len(items),
         }
 
     def categoryContent(self, tid, pg, filter, extend):
+        page = int(pg)
         payload = self._build_payload(
             {
                 "nextCount": 18,
-                "nextVal": "",
+                "nextVal": self.next[page] if page < len(self.next) else "",
                 "queryValueJson": json.dumps(
                     [{"filerName": "channelId", "filerValue": str(tid)}],
                     ensure_ascii=False,
@@ -174,6 +174,11 @@ class Spider(BaseSpider):
         )
         response = self._post_api("/v1/api/search/queryNow", payload)
         data = response.get("data", {})
+        nextVal = data.get("nextVal", '')
+        if len(self.next) == page + 1:
+            self.next.append(nextVal)
+        else:
+            self.next[page + 1] = nextVal
         items = [self._map_video_item(item) for item in data.get("items", []) if isinstance(item, dict)]
         return self._page_result(items, pg, data.get("hasNext") == 1)
 

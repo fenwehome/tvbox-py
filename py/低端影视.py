@@ -221,9 +221,8 @@ class Spider(BaseSpider):
         return {
             "list": items,
             "page": page,
-            "pagecount": page + 1 if items else page,
             "limit": 24,
-            "total": page * 24 + len(items),
+            "total": page * 30 + len(items),
         }
 
     def searchContent(self, key, quick, pg="1"):

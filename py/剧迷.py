@@ -169,13 +169,11 @@ class Spider(BaseSpider):
         url = self._build_category_url(str(tid), str(pg), extend if isinstance(extend, dict) else {})
         items = self._extract_cards(self._request_html(url))
         page = int(pg)
-        pagecount = page + 1 if len(items) >= 20 else page
         return {
             "list": items,
             "page": page,
-            "pagecount": pagecount,
             "limit": 20,
-            "total": page * 20 + len(items),
+            "total": page * 30 + len(items),
         }
 
     def _pick_info(self, html, label):

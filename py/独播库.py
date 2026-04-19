@@ -181,13 +181,11 @@ class Spider(BaseSpider):
 
     def _page_result(self, items, pg):
         page = int(pg)
-        pagecount = page + 1 if items else page
         return {
             "list": items,
             "page": page,
-            "pagecount": pagecount,
             "limit": len(items),
-            "total": pagecount * max(len(items), 1),
+            "total": page * 30 + len(items),
         }
 
     def categoryContent(self, tid, pg, filter, extend):
