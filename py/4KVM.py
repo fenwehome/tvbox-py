@@ -1,7 +1,9 @@
 # coding=utf-8
 import json
 import re
+import subprocess
 import sys
+from pathlib import Path
 from urllib.parse import parse_qsl, quote, urljoin, urlsplit
 
 from lxml import html as lxml_html
@@ -493,6 +495,154 @@ class Spider(BaseSpider):
         except Exception:
             return {}
 
+    def _extract_nbmovie_context(self, play_page_html, play_slug):
+        html_text = str(play_page_html or "")
+        root = self._parse_html(html_text)
+        play_path = "/" + str(play_slug or "").lstrip("/")
+        if not play_path.startswith("/play/"):
+            play_path = "/play/" + play_path.lstrip("/")
+
+        dataid = ""
+        if root is not None:
+            for node in root.xpath("//a[@href and @dataid]"):
+                href = self._clean_text(node.get("href", ""))
+                if href == play_path:
+                    dataid = self._clean_text(node.get("dataid", ""))
+                    break
+
+        userlink = ""
+        userlink_match = re.search(r"userlink:'([^']+)'", html_text)
+        if userlink_match:
+            userlink = self._clean_text(userlink_match.group(1))
+
+        nbst = ""
+        if root is not None:
+            nbst = self._first_xpath_attr(root, ["//meta[@id='nb-st']/@content"])
+
+        wasm_js = ""
+        wasm_bg = ""
+        if root is not None:
+            wasm_js = self._first_xpath_attr(root, ["//link[@id='wasm-cfg']/@data-js"])
+            wasm_bg = self._first_xpath_attr(root, ["//link[@id='wasm-cfg']/@data-bg"])
+
+        if not (dataid and userlink and nbst and wasm_js and wasm_bg):
+            return {}
+
+        return {
+            "dataid": dataid,
+            "userlink": userlink,
+            "nbst": nbst,
+            "wasm_js": self._normalize_url(wasm_js),
+            "wasm_bg": self._normalize_url(wasm_bg),
+        }
+
+    def _cache_nbmovie_runtime(self, wasm_js_url, wasm_bg_url):
+        cache_dir = Path("/tmp/4kvm_nbmovie")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        js_name = re.sub(r"[^a-zA-Z0-9._-]", "_", urlsplit(wasm_js_url).path.rsplit("/", 1)[-1] or "nbmovie_wasm.js")
+        if not js_name.endswith(".mjs"):
+            js_name = re.sub(r"\.js$", "", js_name) + ".mjs"
+        wasm_name = re.sub(r"[^a-zA-Z0-9._-]", "_", urlsplit(wasm_bg_url).path.rsplit("/", 1)[-1] or "nbmovie_wasm_bg.wasm")
+
+        js_path = cache_dir / js_name
+        wasm_path = cache_dir / wasm_name
+
+        if not js_path.exists():
+            response = self.fetch(wasm_js_url, headers=self.headers, timeout=15, verify=False)
+            if response.status_code != 200:
+                return None, None
+            js_path.write_text(response.text or "", encoding="utf-8")
+
+        if not wasm_path.exists():
+            response = self.fetch(wasm_bg_url, headers=self.headers, timeout=15, verify=False)
+            if response.status_code != 200:
+                return None, None
+            content = getattr(response, "content", None)
+            if content is None:
+                return None, None
+            wasm_path.write_bytes(content)
+
+        return js_path, wasm_path
+
+    def _build_nbmovie_api_url(self, play_page_html, play_slug, dataid, quality="1080"):
+        context = self._extract_nbmovie_context(play_page_html, play_slug)
+        if not context:
+            return ""
+
+        js_path, wasm_path = self._cache_nbmovie_runtime(context["wasm_js"], context["wasm_bg"])
+        if not (js_path and wasm_path):
+            return ""
+
+        script = """
+import { readFileSync } from "node:fs";
+globalThis.HTMLMetaElement = class HTMLMetaElement { constructor(content){ this.content = content; } };
+globalThis.Window = class Window {};
+const meta = {
+  "nb-st": new HTMLMetaElement(process.argv[1]),
+  "nb-plt": new HTMLMetaElement(String(Date.now()))
+};
+const w = new Window();
+w.document = { getElementById(id){ return meta[id] || null; } };
+globalThis.window = w;
+const mod = await import(process.argv[2]);
+mod.initSync({ module: readFileSync(process.argv[3]) });
+process.stdout.write(%s + mod.build_play_url(process.argv[4], process.argv[5], process.argv[6], process.argv[7]));
+""" % json.dumps(self.host)
+
+        try:
+            result = subprocess.run(
+                [
+                    "node",
+                    "--input-type=module",
+                    "-e",
+                    script,
+                    context["nbst"],
+                    js_path.resolve().as_uri(),
+                    str(wasm_path),
+                    str(dataid or context["dataid"]),
+                    str(play_slug),
+                    str(quality),
+                    context["userlink"],
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except Exception:
+            return ""
+
+        if result.returncode != 0:
+            return ""
+        return self._clean_text(result.stdout)
+
+    def _pick_nbmovie_play_url(self, api_payload):
+        data = api_payload.get("data", {}) if isinstance(api_payload, dict) else {}
+        quality_urls = data.get("quality_urls", []) if isinstance(data, dict) else []
+        if not isinstance(quality_urls, list) or not quality_urls:
+            return ""
+
+        candidates = []
+        current_quality = data.get("current_quality")
+        try:
+            current_index = int(current_quality)
+        except Exception:
+            current_index = -1
+
+        if 0 <= current_index < len(quality_urls):
+            candidates.append(quality_urls[current_index])
+        candidates.extend(quality_urls)
+
+        for item in candidates:
+            if not isinstance(item, dict):
+                continue
+            url = self._clean_text(item.get("url", ""))
+            if not url or url == "1":
+                continue
+            return self._normalize_url(url)
+        return ""
+
     def playerContent(self, flag, id, vipFlags):
         encoded = self._encode_site_path(id)
         parsed = urlsplit(self._decode_site_path(encoded))
@@ -522,6 +672,27 @@ class Spider(BaseSpider):
                     }
 
         html_text = self._request_html(page_url)
+        play_slug = base_id or encoded.split("?", 1)[0]
+        nbmovie_api_url = self._build_nbmovie_api_url(
+            play_page_html=html_text,
+            play_slug=play_slug,
+            dataid=self._extract_nbmovie_context(html_text, play_slug).get("dataid", ""),
+            quality="1080",
+        )
+        if nbmovie_api_url:
+            api_headers = dict(self.headers)
+            api_headers["Referer"] = page_url
+            api_headers["Accept"] = "application/json,text/plain,*/*"
+            response = self.fetch(nbmovie_api_url, headers=api_headers, timeout=10, verify=False)
+            if response.status_code == 200:
+                play_url = self._pick_nbmovie_play_url(self._parse_json(response.text))
+                if play_url:
+                    return {
+                        "parse": 0 if self._is_direct_play_url(play_url) else 1,
+                        "url": play_url,
+                        "header": api_headers,
+                    }
+
         root = self._parse_html(html_text)
         iframe = self._first_xpath_attr(
             root,

@@ -229,6 +229,41 @@ class Test4KVMSpider(unittest.TestCase):
         self.assertEqual(video_result["parse"], 0)
         self.assertEqual(video_result["url"], "https://www.4kvm.org/stream.m3u8")
 
+    @patch.object(Spider, "fetch")
+    def test_player_content_uses_nbmovie_api_for_current_site_structure(self, mock_fetch):
+        page_html = """
+        <html>
+          <head>
+            <meta id="nb-st" content="1776604294700" />
+          </head>
+          <body>
+            <nav x-data="{isLoggedIn: false, userlink:'X1VaWUBdUgYJBg4FCgc7IUlfXUlc'}"></nav>
+            <link id="wasm-cfg" data-js="/static/wasm/nbmovie_wasm.426511b7.js" data-bg="/static/wasm/nbmovie_wasm_bg.d5d51939.wasm" />
+            <a href="/play/ch43qikut" dataid="33260" data-line="1" data-episode="1">1</a>
+          </body>
+        </html>
+        """
+        api_json = """
+        {
+          "code": 200,
+          "data": {
+            "play_id": "33260",
+            "current_quality": 1,
+            "quality_urls": [
+              {"title": "流畅", "url": "1"},
+              {"title": "1080P", "url": "https://cdn.example.com/stream/master.m3u8"}
+            ]
+          }
+        }
+        """
+        self.spider._build_nbmovie_api_url = lambda **kwargs: "https://www.4kvm.org/video/play?signed=1"
+        mock_fetch.side_effect = [FakeResponse(page_html), FakeResponse(api_json)]
+
+        result = self.spider.playerContent("", "play/ch43qikut", [])
+
+        self.assertEqual(result["parse"], 0)
+        self.assertEqual(result["url"], "https://cdn.example.com/stream/master.m3u8")
+
 
 if __name__ == "__main__":
     unittest.main()
