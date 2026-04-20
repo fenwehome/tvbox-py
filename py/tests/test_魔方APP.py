@@ -2,6 +2,7 @@ import unittest
 from datetime import datetime
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -138,3 +139,127 @@ class TestMoFangAppSpider(unittest.TestCase):
         result = self.spider.searchContent("繁花", False, "1")
         self.assertEqual(result["list"], [])
         self.assertEqual(result.get("msg"), "验证码获取失败")
+
+    @patch.object(Spider, "_api_post")
+    def test_detail_content_falls_back_to_second_endpoint_sorts_lines_and_blocks_disabled_lines(self, mock_api_post):
+        mock_api_post.side_effect = [
+            None,
+            {
+                "vod": {
+                    "vod_name": "示例影片",
+                    "vod_pic": "poster.jpg",
+                    "vod_remarks": "更新至10集",
+                    "vod_content": "一段剧情",
+                    "vod_actor": "演员甲/演员乙",
+                    "vod_director": "导演甲",
+                    "vod_year": "2025",
+                    "vod_area": "中国大陆",
+                },
+                "vod_play_list": [
+                    {
+                        "player_info": {
+                            "show": "腾讯视频",
+                            "parse": "https://parser-a/?url=",
+                            "player_parse_type": "1",
+                            "parse_type": "1",
+                        },
+                        "urls": [{"name": "正片", "url": "https%3A%2F%2Fplay-a", "token": "tk-a"}],
+                    },
+                    {
+                        "player_info": {
+                            "show": "防走丢加群",
+                            "parse": "https://parser-b/?url=",
+                            "player_parse_type": "1",
+                            "parse_type": "0",
+                        },
+                        "urls": [{"name": "备用", "url": "https%3A%2F%2Fplay-b", "token": "tk-b"}],
+                    },
+                    {
+                        "player_info": {
+                            "show": "YY",
+                            "parse": "https://parser-c/?url=",
+                            "player_parse_type": "2",
+                            "parse_type": "2",
+                        },
+                        "urls": [{"name": "蓝光", "url": "https%3A%2F%2Fplay-c", "token": "tk-c"}],
+                    },
+                ],
+            },
+        ]
+        result = self.spider.detailContent(["123"])
+        vod = result["list"][0]
+        self.assertEqual(vod["vod_id"], "123")
+        self.assertEqual(vod["vod_name"], "示例影片")
+        self.assertEqual(vod["vod_year"], "2025年")
+        self.assertEqual(vod["vod_play_from"], "⭐️腾讯视频$$$1线")
+        self.assertEqual(
+            vod["vod_play_url"],
+            "正片$腾讯视频@@direct@@https://parser-a/?url=,https%3A%2F%2Fplay-a,token+tk-a,1,1"
+            "$$$备用$1线@@direct@@https://parser-b/?url=,https%3A%2F%2Fplay-b,token+tk-b,1,0",
+        )
+
+    @patch.object(Spider, "fetch")
+    def test_get_verification_code_fetches_image_calls_ocr_and_returns_digits(self, mock_fetch):
+        image_response = SimpleNamespace(content=b"fake-image")
+        ocr_response = SimpleNamespace(text="5y6口")
+        mock_fetch.side_effect = [image_response, ocr_response]
+        result = self.spider._get_verification_code()
+        self.assertEqual(result["code"], "5960")
+        self.assertIn("uuid", result)
+
+    def test_player_content_returns_direct_url_for_parse_type_zero(self):
+        result = self.spider.playerContent(
+            "⭐️腾讯视频",
+            "腾讯视频@@direct@@https://parser/?url=,https%3A%2F%2Fvideo.example%2Fraw.m3u8,token+abc,1,0",
+            "",
+        )
+        self.assertEqual(
+            result,
+            {
+                "parse": 0,
+                "jx": 0,
+                "url": "https://video.example/raw.m3u8",
+                "header": {"User-Agent": "Dalvik/2.1.0 (Linux; Android 14)"},
+            },
+        )
+
+    def test_player_content_returns_parser_url_for_parse_type_two(self):
+        result = self.spider.playerContent(
+            "⭐️腾讯视频",
+            "腾讯视频@@direct@@https://parser/?url=,https%3A%2F%2Fvideo.example%2Fneed-jx.m3u8,token+abc,1,2",
+            "",
+        )
+        self.assertEqual(
+            result,
+            {
+                "parse": 1,
+                "jx": 1,
+                "url": "https://parser/?url=https://video.example/need-jx.m3u8",
+                "header": {"User-Agent": "Dalvik/2.1.0 (Linux; Android 14)"},
+            },
+        )
+
+    @patch.object(Spider, "fetch")
+    def test_player_content_uses_player_parse_type_two_direct_json(self, mock_fetch):
+        mock_fetch.return_value = SimpleNamespace(text='{"url":"https://video.example/direct.m3u8"}')
+        result = self.spider.playerContent(
+            "⭐️腾讯视频",
+            "腾讯视频@@direct@@https://parser/?url=,https%3A%2F%2Fvideo.example%2Fwrapped,token+abc,2,1",
+            "",
+        )
+        self.assertEqual(result["parse"], 0)
+        self.assertEqual(result["jx"], 0)
+        self.assertEqual(result["url"], "https://video.example/direct.m3u8")
+
+    @patch.object(Spider, "_api_post")
+    def test_player_content_falls_back_to_vod_parse(self, mock_api_post):
+        mock_api_post.return_value = {"json": '{"url":"https://video.example/final.m3u8"}'}
+        result = self.spider.playerContent(
+            "⭐️腾讯视频",
+            "腾讯视频@@direct@@https://parser/?url=,https%3A%2F%2Fvideo.example%2Fencrypted,token+abc,1,1",
+            "",
+        )
+        self.assertEqual(result["parse"], 0)
+        self.assertEqual(result["jx"], 0)
+        self.assertEqual(result["url"], "https://video.example/final.m3u8")
+        self.assertEqual(mock_api_post.call_args.args[0], "vodParse")
