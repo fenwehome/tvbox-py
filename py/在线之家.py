@@ -1,6 +1,8 @@
 # coding=utf-8
 import json
+import re
 import sys
+from urllib.parse import quote
 
 from base.spider import Spider as BaseSpider
 
@@ -153,3 +155,73 @@ class Spider(BaseSpider):
             f"{values.get('year', '')}"
         )
         return self._build_url(f"/vodshow/{path}.html")
+
+    def _clean_text(self, text):
+        return re.sub(r"\s+", " ", str(text or "").replace("\xa0", " ")).strip()
+
+    def _fix_json_wrapped_html(self, html):
+        value = str(html or "").strip()
+        if value.startswith("<"):
+            return value
+        if value.startswith('"') and value.endswith('"'):
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, str) and parsed.startswith("<"):
+                    return parsed.strip()
+            except Exception:
+                return value
+        return value
+
+    def _request_html(self, path_or_url, referer=None):
+        target = path_or_url if str(path_or_url).startswith("http") else self._build_url(path_or_url)
+        headers = dict(self.headers)
+        headers["Referer"] = referer or self.headers["Referer"]
+        response = self.fetch(target, headers=headers, timeout=10)
+        if response.status_code != 200:
+            return ""
+        return self._fix_json_wrapped_html(response.text or "")
+
+    def _extract_vod_id(self, href):
+        raw = str(href or "").strip()
+        matched = re.search(r"/?(voddetail/\d+\.html)", raw)
+        return matched.group(1) if matched else ""
+
+    def _parse_cards(self, html):
+        root = self.html(html)
+        if root is None:
+            return []
+        items = []
+        seen = set()
+        for node in root.xpath("//ul[contains(@class,'stui-vodlist')]//li"):
+            href = ((node.xpath(".//a[@href][1]/@href") or [""])[0]).strip()
+            vod_id = self._extract_vod_id(href)
+            title = ((node.xpath(".//a[@title][1]/@title") or [""])[0]).strip()
+            pic = (
+                ((node.xpath(".//a[@data-original][1]/@data-original") or [""])[0]).strip()
+                or ((node.xpath(".//img[@data-original][1]/@data-original") or [""])[0]).strip()
+                or ((node.xpath(".//img[@src][1]/@src") or [""])[0]).strip()
+            )
+            remarks = self._clean_text("".join(node.xpath(".//*[contains(@class,'pic-text')][1]//text()")))
+            if not vod_id or not title or vod_id in seen:
+                continue
+            seen.add(vod_id)
+            items.append(
+                {
+                    "vod_id": vod_id,
+                    "vod_name": title,
+                    "vod_pic": self._build_url(pic),
+                    "vod_remarks": remarks,
+                }
+            )
+        return items
+
+    def categoryContent(self, tid, pg, filter, extend):
+        page = int(pg)
+        items = self._parse_cards(self._request_html(self._build_category_url(tid, pg, extend)))
+        return {"list": items, "page": page, "limit": 24, "total": page * 30 + len(items)}
+
+    def searchContent(self, key, quick, pg="1"):
+        page = int(pg)
+        url = self._build_url("/vodsearch/{0}-------------.html".format(quote(str(key or "").strip())))
+        items = self._parse_cards(self._request_html(url))
+        return {"list": items, "page": page, "limit": len(items), "total": len(items)}
