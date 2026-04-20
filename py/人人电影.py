@@ -143,3 +143,53 @@ class Spider(BaseSpider):
 
         items = self._parse_cards(self._request_html(url))
         return {"page": page, "total": len(items), "list": items}
+
+    def _extract_pan_links(self, html):
+        root = self.html(html)
+        if root is None:
+            return []
+
+        items = []
+        seen = set()
+        for node in root.xpath("//*[contains(@class,'movie-txt')]//a[@href]"):
+            href = "".join(node.xpath("./@href")).strip()
+            title = self._clean_text("".join(node.xpath(".//text()"))) or "网盘资源"
+            if not self._is_supported_pan_url(href) or href in seen:
+                continue
+            seen.add(href)
+            items.append((title, href))
+        return items
+
+    def _parse_detail(self, vod_id, html):
+        root = self.html(html)
+        if root is None:
+            return {
+                "vod_id": vod_id,
+                "vod_name": "",
+                "vod_pic": "",
+                "vod_content": "",
+                "vod_play_from": "",
+                "vod_play_url": "",
+            }
+
+        vod_name = self._clean_text("".join(root.xpath("//*[contains(@class,'movie-des')]//h1[1]//text()")))
+        vod_pic = self._build_url("".join(root.xpath("//*[contains(@class,'movie-img')]//img[1]/@src")).strip())
+        vod_content = self._clean_text("".join(root.xpath("//*[contains(@class,'movie-txt')][1]//text()")))
+        pan_links = self._extract_pan_links(html)
+        play_url = "#".join([f"{title}${url}" for title, url in pan_links])
+        return {
+            "vod_id": vod_id,
+            "vod_name": vod_name,
+            "vod_pic": vod_pic,
+            "vod_content": vod_content,
+            "vod_play_from": "网盘" if play_url else "",
+            "vod_play_url": play_url,
+        }
+
+    def detailContent(self, ids):
+        result = {"list": []}
+        for raw_id in ids:
+            vod_id = str(raw_id or "").strip()
+            detail = self._parse_detail(vod_id, self._request_html(self._build_url(vod_id)))
+            result["list"].append(detail)
+        return result

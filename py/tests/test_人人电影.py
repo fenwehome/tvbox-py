@@ -124,3 +124,45 @@ class TestRenRenDianYingSpider(unittest.TestCase):
 
     def test_search_content_returns_empty_list_for_blank_keyword(self):
         self.assertEqual(self.spider.searchContent("", False, "1"), {"page": 1, "total": 0, "list": []})
+
+    def test_extract_pan_links_filters_xunlei_and_aliyun(self):
+        html = """
+        <div class="movie-txt">
+          <a href="https://pan.baidu.com/s/b1">百度网盘</a>
+          <a href="https://pan.quark.cn/s/q1">夸克资源</a>
+          <a href="https://pan.xunlei.com/s/x1">迅雷资源</a>
+          <a href="https://www.alipan.com/s/a1">阿里资源</a>
+        </div>
+        """
+        self.assertEqual(
+            self.spider._extract_pan_links(html),
+            [
+                ("百度网盘", "https://pan.baidu.com/s/b1"),
+                ("夸克资源", "https://pan.quark.cn/s/q1"),
+            ],
+        )
+
+    @patch.object(Spider, "_request_html")
+    def test_detail_content_extracts_meta_and_builds_single_pan_line(self, mock_request_html):
+        mock_request_html.return_value = """
+        <div class="movie-des"><h1>人人示例片</h1></div>
+        <div class="movie-img"><img src="/poster-detail.jpg" /></div>
+        <div class="movie-txt">
+          <p>一段简介</p>
+          <a href="https://pan.baidu.com/s/b1">百度网盘</a>
+          <a href="https://pan.quark.cn/s/q1">夸克资源</a>
+          <a href="https://pan.xunlei.com/s/x1">迅雷资源</a>
+        </div>
+        """
+        result = self.spider.detailContent(["/movie/123.html"])
+        self.assertEqual(mock_request_html.call_args.args[0], "https://www.rrdynb.com/movie/123.html")
+        vod = result["list"][0]
+        self.assertEqual(vod["vod_id"], "/movie/123.html")
+        self.assertEqual(vod["vod_name"], "人人示例片")
+        self.assertEqual(vod["vod_pic"], "https://www.rrdynb.com/poster-detail.jpg")
+        self.assertIn("一段简介", vod["vod_content"])
+        self.assertEqual(vod["vod_play_from"], "网盘")
+        self.assertEqual(
+            vod["vod_play_url"],
+            "百度网盘$https://pan.baidu.com/s/b1#夸克资源$https://pan.quark.cn/s/q1",
+        )
