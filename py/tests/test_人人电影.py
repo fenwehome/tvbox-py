@@ -73,6 +73,35 @@ class TestRenRenDianYingSpider(unittest.TestCase):
             ],
         )
 
+    def test_parse_cards_uses_first_valid_cover_instead_of_concatenating_multiple_urls(self):
+        html = """
+        <ul id="movielist">
+          <li>
+            <div class="pure-img">
+              <img data-original="/poster-main.jpg" />
+            </div>
+            <div class="pure-img">
+              <img data-original="https://cdn.example.com/poster-backup.jpg" />
+            </div>
+            <div class="intro">
+              <h2><a href="/movie/999.html" title="封面测试">封面测试</a></h2>
+            </div>
+            <div class="dou"><b>HD</b></div>
+          </li>
+        </ul>
+        """
+        self.assertEqual(
+            self.spider._parse_cards(html),
+            [
+                {
+                    "vod_id": "/movie/999.html",
+                    "vod_name": "封面测试",
+                    "vod_pic": "https://www.rrdynb.com/poster-main.jpg",
+                    "vod_remarks": "HD",
+                }
+            ],
+        )
+
     @patch.object(Spider, "_request_html")
     def test_category_content_builds_reference_url_and_page_payload(self, mock_request_html):
         mock_request_html.return_value = """
@@ -142,6 +171,20 @@ class TestRenRenDianYingSpider(unittest.TestCase):
             ],
         )
 
+    def test_build_pan_lines_groups_by_detected_pan_type(self):
+        pan_links = [
+            ("夸克资源", "https://pan.quark.cn/s/q1"),
+            ("百度网盘", "https://pan.baidu.com/s/b1"),
+            ("百度网盘2", "https://pan.baidu.com/s/b2"),
+        ]
+        self.assertEqual(
+            self.spider._build_pan_lines(pan_links),
+            [
+                ("baidu", "百度网盘$https://pan.baidu.com/s/b1#百度网盘2$https://pan.baidu.com/s/b2"),
+                ("quark", "夸克资源$https://pan.quark.cn/s/q1"),
+            ],
+        )
+
     @patch.object(Spider, "_request_html")
     def test_detail_content_extracts_meta_and_builds_single_pan_line(self, mock_request_html):
         mock_request_html.return_value = """
@@ -161,10 +204,10 @@ class TestRenRenDianYingSpider(unittest.TestCase):
         self.assertEqual(vod["vod_name"], "人人示例片")
         self.assertEqual(vod["vod_pic"], "https://www.rrdynb.com/poster-detail.jpg")
         self.assertIn("一段简介", vod["vod_content"])
-        self.assertEqual(vod["vod_play_from"], "网盘")
+        self.assertEqual(vod["vod_play_from"], "baidu$$$quark")
         self.assertEqual(
             vod["vod_play_url"],
-            "百度网盘$https://pan.baidu.com/s/b1#夸克资源$https://pan.quark.cn/s/q1",
+            "百度网盘$https://pan.baidu.com/s/b1$$$夸克资源$https://pan.quark.cn/s/q1",
         )
 
     def test_player_content_passthroughs_supported_pan_urls(self):

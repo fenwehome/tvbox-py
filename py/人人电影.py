@@ -40,6 +40,24 @@ class Spider(BaseSpider):
             r"aliyundrive\.com",
             r"alipan\.com",
         ]
+        self.pan_type_patterns = [
+            ("baidu", r"pan\.baidu\.com|yun\.baidu\.com"),
+            ("quark", r"pan\.quark\.cn"),
+            ("uc", r"drive\.uc\.cn"),
+            ("115", r"115\.com"),
+            ("123pan", r"123pan\.com|123684\.com|123865\.com|123912\.com"),
+            ("189", r"cloud\.189\.cn"),
+            ("139", r"yun\.139\.com"),
+        ]
+        self.pan_priority = {
+            "baidu": 1,
+            "quark": 2,
+            "uc": 3,
+            "115": 4,
+            "123pan": 5,
+            "189": 6,
+            "139": 7,
+        }
 
     def init(self, extend=""):
         return None
@@ -79,6 +97,13 @@ class Spider(BaseSpider):
             return False
         return any(re.search(pattern, raw, re.I) for pattern in self.supported_pan_patterns)
 
+    def _detect_pan_type(self, url):
+        raw = str(url or "").strip()
+        for pan_type, pattern in self.pan_type_patterns:
+            if re.search(pattern, raw, re.I):
+                return pan_type
+        return ""
+
     def _request_html(self, path_or_url):
         target = path_or_url if str(path_or_url).startswith("http") else self._build_url(path_or_url)
         response = self.fetch(target, headers=dict(self.headers), timeout=10)
@@ -88,6 +113,13 @@ class Spider(BaseSpider):
 
     def _clean_text(self, text):
         return re.sub(r"\s+", " ", str(text or "").replace("\xa0", " ")).strip()
+
+    def _first_xpath_result(self, node, expr):
+        for value in node.xpath(expr):
+            text = str(value or "").strip()
+            if text:
+                return text
+        return ""
 
     def _parse_cards(self, html):
         root = self.html(html)
@@ -103,12 +135,12 @@ class Spider(BaseSpider):
                 or "".join(node.xpath(".//*[contains(@class,'intro')]//h2//a[1]//text()")).strip()
             )
             pic = (
-                "".join(node.xpath(".//*[contains(@class,'pure-img')][1]/@data-original")).strip()
-                or "".join(node.xpath(".//*[contains(@class,'pure-img')][1]/@src")).strip()
-                or "".join(node.xpath(".//*[contains(@class,'pure-img')]//img[1]/@data-original")).strip()
-                or "".join(node.xpath(".//*[contains(@class,'pure-img')]//img[1]/@src")).strip()
-                or "".join(node.xpath(".//*[contains(@class,'pure-u-5-24')]//img[1]/@data-original")).strip()
-                or "".join(node.xpath(".//*[contains(@class,'pure-u-5-24')]//img[1]/@src")).strip()
+                self._first_xpath_result(node, ".//*[contains(@class,'pure-img')][1]/@data-original")
+                or self._first_xpath_result(node, ".//*[contains(@class,'pure-img')][1]/@src")
+                or self._first_xpath_result(node, ".//*[contains(@class,'pure-img')]//img[1]/@data-original")
+                or self._first_xpath_result(node, ".//*[contains(@class,'pure-img')]//img[1]/@src")
+                or self._first_xpath_result(node, ".//*[contains(@class,'pure-u-5-24')]//img[1]/@data-original")
+                or self._first_xpath_result(node, ".//*[contains(@class,'pure-u-5-24')]//img[1]/@src")
             )
             remarks = self._clean_text("".join(node.xpath(".//*[contains(@class,'dou')][1]//text()")))
             if not href or not title or href in seen:
@@ -160,6 +192,22 @@ class Spider(BaseSpider):
             items.append((title, href))
         return items
 
+    def _build_pan_lines(self, pan_links):
+        grouped = {}
+        order_seen = []
+        for title, url in pan_links:
+            pan_type = self._detect_pan_type(url)
+            if not pan_type:
+                continue
+            if pan_type not in grouped:
+                grouped[pan_type] = []
+                order_seen.append(pan_type)
+            existing_urls = {item.split("$", 1)[1] for item in grouped[pan_type]}
+            if url not in existing_urls:
+                grouped[pan_type].append(f"{title}${url}")
+        names = sorted(order_seen, key=lambda name: self.pan_priority.get(name, 999))
+        return [(name, "#".join(grouped[name])) for name in names if grouped[name]]
+
     def _parse_detail(self, vod_id, html):
         root = self.html(html)
         if root is None:
@@ -175,15 +223,14 @@ class Spider(BaseSpider):
         vod_name = self._clean_text("".join(root.xpath("//*[contains(@class,'movie-des')]//h1[1]//text()")))
         vod_pic = self._build_url("".join(root.xpath("//*[contains(@class,'movie-img')]//img[1]/@src")).strip())
         vod_content = self._clean_text("".join(root.xpath("//*[contains(@class,'movie-txt')][1]//text()")))
-        pan_links = self._extract_pan_links(html)
-        play_url = "#".join([f"{title}${url}" for title, url in pan_links])
+        lines = self._build_pan_lines(self._extract_pan_links(html))
         return {
             "vod_id": vod_id,
             "vod_name": vod_name,
             "vod_pic": vod_pic,
             "vod_content": vod_content,
-            "vod_play_from": "网盘" if play_url else "",
-            "vod_play_url": play_url,
+            "vod_play_from": "$$$".join([item[0] for item in lines]),
+            "vod_play_url": "$$$".join([item[1] for item in lines]),
         }
 
     def detailContent(self, ids):
