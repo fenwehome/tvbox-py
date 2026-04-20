@@ -211,3 +211,45 @@ class TestJingyuSpider(unittest.TestCase):
         self.assertEqual(len(result["list"]), 1)
         self.assertEqual(result["list"][0]["vod_name"], "繁花")
         self.assertNotIn("pagecount", result)
+
+    def test_player_direct_parse_type_0(self):
+        play_id = "线路一@@direct@@http://parse.com,http://video.m3u8,token+t1,1,0"
+        result = self.spider.playerContent("线路一", play_id, {})
+        self.assertEqual(result["parse"], 0)
+        self.assertEqual(result["url"], "http://video.m3u8")
+
+    def test_player_prefix_parse_type_2(self):
+        play_id = "线路二@@direct@@http://parse.com,http://video.m3u8,token+t1,1,2"
+        result = self.spider.playerContent("线路二", play_id, {})
+        self.assertEqual(result["parse"], 1)
+        self.assertEqual(result["url"], "http://parse.comhttp://video.m3u8")
+
+    def test_player_vod_parse_default(self):
+        play_id = "线路三@@direct@@http://parse.com,http://video.m3u8,token+t1,1,1"
+        inner = json.dumps({"url": "http://decrypted.m3u8"})
+        encrypted_inner = self.spider._aes_encrypt(json.dumps({"json": inner}))
+
+        class FakeRsp:
+            status_code = 200
+            encoding = "utf-8"
+            def json(self):
+                return {"data": encrypted_inner}
+
+        self.spider.post = lambda url, **kwargs: FakeRsp()
+        self.spider.host = "http://test.com"
+        result = self.spider.playerContent("线路三", play_id, {})
+        self.assertEqual(result["parse"], 0)
+        self.assertEqual(result["url"], "http://decrypted.m3u8")
+
+    def test_player_fetch_parse_player_parse_type_2(self):
+        play_id = "线路四@@direct@@,http://video.m3u8,token+t1,2,1"
+
+        class FakeFetchRsp:
+            def json(self):
+                return {"url": "http://fetched.m3u8"}
+
+        self.spider.fetch = lambda url, **kwargs: FakeFetchRsp()
+        self.spider.host = "http://test.com"
+        result = self.spider.playerContent("线路四", play_id, {})
+        self.assertEqual(result["parse"], 0)
+        self.assertEqual(result["url"], "http://fetched.m3u8")

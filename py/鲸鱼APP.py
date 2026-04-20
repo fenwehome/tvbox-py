@@ -352,3 +352,58 @@ class Spider(BaseSpider):
             "vod_remarks": f"{i.get('vod_year', '')} {i.get('vod_class', '')}".strip(),
         } for i in filtered]
         return {"list": items, "page": int(pg), "limit": 90, "total": 999999}
+
+    def playerContent(self, flag, id, vipFlags):
+        try:
+            parts = id.split("@@")
+            if len(parts) < 3:
+                return {"parse": 0, "jx": 0, "url": ""}
+            payload = parts[2]
+
+            arr = payload.split(",")
+            if len(arr) < 5:
+                return {"parse": 0, "jx": 0, "url": ""}
+
+            parse_api = arr[0]
+            kurl = arr[1]
+            token = arr[2].replace("token+", "") if arr[2].startswith("token+") else arr[2]
+            player_parse_type = arr[3]
+            parse_type = arr[4]
+
+            try:
+                from urllib.parse import unquote
+                kurl = unquote(kurl)
+            except Exception:
+                pass
+
+            header = {"User-Agent": "Dalvik/2.1.0 (Linux; Android 14)"}
+
+            if parse_type == "0":
+                return {"parse": 0, "jx": 0, "url": kurl, "header": header}
+
+            if parse_type == "2":
+                return {"parse": 1, "jx": 1, "url": parse_api + kurl, "header": header}
+
+            if player_parse_type == "2":
+                try:
+                    rsp = self.fetch(parse_api + kurl, headers={"User-Agent": self.ua}, timeout=10, verify=False)
+                    fetched = rsp.json()
+                    if fetched.get("url"):
+                        return {"parse": 0, "jx": 0, "url": fetched["url"]}
+                except Exception:
+                    pass
+
+            encrypted_url = self._aes_encrypt(kurl)
+            res = self._api_post("vodParse", {
+                "parse_api": parse_api,
+                "url": encrypted_url,
+                "player_parse_type": player_parse_type,
+                "token": token,
+            })
+            if not res or not res.get("json"):
+                return {"parse": 0, "jx": 0, "url": ""}
+            inner = json.loads(res["json"])
+            return {"parse": 0, "jx": 0, "url": inner.get("url", "")}
+        except Exception as e:
+            self.log(f"播放解析失败: {e}")
+            return {"parse": 0, "jx": 0, "url": ""}
