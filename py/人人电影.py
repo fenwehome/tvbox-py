@@ -1,7 +1,7 @@
 # coding=utf-8
 import re
 import sys
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 from base.spider import Spider as BaseSpider
 
@@ -107,6 +107,8 @@ class Spider(BaseSpider):
                 or "".join(node.xpath(".//*[contains(@class,'pure-img')][1]/@src")).strip()
                 or "".join(node.xpath(".//*[contains(@class,'pure-img')]//img[1]/@data-original")).strip()
                 or "".join(node.xpath(".//*[contains(@class,'pure-img')]//img[1]/@src")).strip()
+                or "".join(node.xpath(".//*[contains(@class,'pure-u-5-24')]//img[1]/@data-original")).strip()
+                or "".join(node.xpath(".//*[contains(@class,'pure-u-5-24')]//img[1]/@src")).strip()
             )
             remarks = self._clean_text("".join(node.xpath(".//*[contains(@class,'dou')][1]//text()")))
             if not href or not title or href in seen:
@@ -128,3 +130,16 @@ class Spider(BaseSpider):
         url = self._build_url(f"{class_path}_{page}.html")
         items = self._parse_cards(self._request_html(url))
         return {"page": page, "limit": len(items), "total": page * 20 + len(items), "list": items}
+
+    def searchContent(self, key, quick, pg="1"):
+        page = int(pg)
+        keyword = self._clean_text(key)
+        if not keyword:
+            return {"page": page, "total": 0, "list": []}
+
+        url = self._build_url(f"/plus/search.php?q={quote(keyword)}&pagesize=10&submit=")
+        if page > 1:
+            url += f"&PageNo={page}"
+
+        items = self._parse_cards(self._request_html(url))
+        return {"page": page, "total": len(items), "list": items}

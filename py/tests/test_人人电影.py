@@ -93,3 +93,34 @@ class TestRenRenDianYingSpider(unittest.TestCase):
         self.assertEqual(result["limit"], 1)
         self.assertEqual(result["list"][0]["vod_name"], "分类影片")
         self.assertNotIn("pagecount", result)
+
+    @patch.object(Spider, "_request_html")
+    def test_search_content_builds_reference_url_and_cleans_highlight_title(self, mock_request_html):
+        mock_request_html.return_value = """
+        <ul id="movielist">
+          <li class="pure-g shadow">
+            <div class="pure-u-5-24"><img data-original="/search.jpg" /></div>
+            <div class="intro">
+              <h2><a href="/movie/789.html" title="<font color='red'>剑来</font> 第二季">抢先看</a></h2>
+            </div>
+            <div class="dou"><b>9.2</b></div>
+          </li>
+        </ul>
+        """
+        result = self.spider.searchContent("剑来", False, "2")
+        self.assertEqual(
+            mock_request_html.call_args.args[0],
+            "https://www.rrdynb.com/plus/search.php?q=%E5%89%91%E6%9D%A5&pagesize=10&submit=&PageNo=2",
+        )
+        self.assertEqual(
+            result["list"][0],
+            {
+                "vod_id": "/movie/789.html",
+                "vod_name": "剑来 第二季",
+                "vod_pic": "https://www.rrdynb.com/search.jpg",
+                "vod_remarks": "9.2",
+            },
+        )
+
+    def test_search_content_returns_empty_list_for_blank_keyword(self):
+        self.assertEqual(self.spider.searchContent("", False, "1"), {"page": 1, "total": 0, "list": []})
