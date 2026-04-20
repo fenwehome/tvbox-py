@@ -1,6 +1,7 @@
 import unittest
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -177,6 +178,19 @@ class TestZXZJSpider(unittest.TestCase):
             "https://jx.zxzj.example/player?id=1",
         )
 
+    def test_extract_iframe_url_reads_player_aaaa_target(self):
+        html = """
+        <script>
+        var player_aaaa = {
+            "url":"https://jx.zxzjys.com:9876/player-v2/common/demo/token"
+        };
+        </script>
+        """
+        self.assertEqual(
+            self.spider._extract_iframe_url(html),
+            "https://jx.zxzjys.com:9876/player-v2/common/demo/token",
+        )
+
     @patch.object(Spider, "_request_html")
     def test_player_content_returns_decoded_direct_url_for_zxzj(self, mock_request_html):
         mock_request_html.side_effect = [
@@ -199,6 +213,60 @@ class TestZXZJSpider(unittest.TestCase):
         self.assertEqual(result["parse"], 1)
         self.assertEqual(result["jx"], 1)
         self.assertEqual(result["url"], "https://www.zxzjhd.com/vodplay/999-1-1.html")
+
+    @patch.object(Spider, "_request_html")
+    def test_player_content_falls_back_to_parser_page_when_new_line5_target_cannot_be_decoded(self, mock_request_html):
+        mock_request_html.side_effect = [
+            """
+            <script>
+            var player_aaaa = {
+                "url":"https://jx.zxzjys.com:9876/player-v2/common/demo/token"
+            };
+            </script>
+            """,
+            "",
+        ]
+        result = self.spider.playerContent("zxzj", "vodplay/4627-1-1.html", {})
+        self.assertEqual(result["parse"], 1)
+        self.assertEqual(result["jx"], 1)
+        self.assertEqual(result["url"], "https://jx.zxzjys.com:9876/player-v2/common/demo/token")
+        self.assertEqual(result["header"]["Referer"], "https://www.zxzjhd.com/vodplay/4627-1-1.html")
+
+    @patch.object(Spider, "fetch")
+    def test_player_content_uses_browser_like_headers_for_new_line5_parser_request(self, mock_fetch):
+        play_page = """
+        <script>
+        var player_aaaa = {
+            "url":"https://jx.zxzjys.com:9876/player-v2/common/demo/token"
+        };
+        </script>
+        """
+        parser_page = """
+        <script>
+        var result_v2 = {
+            "data":"d6f636e256c607d6168756e2f67464544434241456469667f2f2a33707474786"
+        };
+        </script>
+        """
+
+        def fake_fetch(url, headers=None, timeout=10):
+            if url == "https://www.zxzjhd.com/vodplay/4627-1-1.html":
+                return SimpleNamespace(status_code=200, text=play_page)
+            if url == "https://jx.zxzjys.com:9876/player-v2/common/demo/token":
+                self.assertEqual(headers["Referer"], "https://www.zxzjhd.com/vodplay/4627-1-1.html")
+                self.assertEqual(headers["Origin"], "https://www.zxzjhd.com")
+                self.assertEqual(headers["Sec-Fetch-Dest"], "iframe")
+                self.assertEqual(headers["Sec-Fetch-Mode"], "navigate")
+                self.assertEqual(headers["Sec-Fetch-Site"], "cross-site")
+                self.assertEqual(headers["Upgrade-Insecure-Requests"], "1")
+                return SimpleNamespace(status_code=200, text=parser_page)
+            raise AssertionError(url)
+
+        mock_fetch.side_effect = fake_fetch
+        result = self.spider.playerContent("zxzj", "vodplay/4627-1-1.html", {})
+        self.assertEqual(result["parse"], 0)
+        self.assertEqual(result["jx"], 0)
+        self.assertEqual(result["url"], "https://video.example.com")
 
     def test_player_content_returns_direct_netdisk_link(self):
         result = self.spider.playerContent("quark", "https://pan.quark.cn/s/demo", {})

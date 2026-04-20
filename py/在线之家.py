@@ -233,14 +233,28 @@ class Spider(BaseSpider):
                 return value
         return value
 
-    def _request_html(self, path_or_url, referer=None):
+    def _request_html(self, path_or_url, referer=None, extra_headers=None):
         target = path_or_url if str(path_or_url).startswith("http") else self._build_url(path_or_url)
         headers = dict(self.headers)
         headers["Referer"] = referer or self.headers["Referer"]
+        if isinstance(extra_headers, dict):
+            headers.update(extra_headers)
         response = self.fetch(target, headers=headers, timeout=10)
         if response.status_code != 200:
             return ""
         return self._fix_json_wrapped_html(response.text or "")
+
+    def _build_player_v2_headers(self):
+        return {
+            "Origin": self.host,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9",
+            "Sec-Fetch-Dest": "iframe",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "cross-site",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+        }
 
     def _extract_vod_id(self, href):
         raw = str(href or "").strip()
@@ -458,9 +472,11 @@ class Spider(BaseSpider):
             return ""
 
     def _extract_iframe_url(self, html):
-        matched = re.search(r'"url"\s*:\s*"(https:[^"]*?jx\.zxzj[^"]*?)"', str(html or ""))
+        matched = re.search(r'"url"\s*:\s*"(https:[^"]*?)"', str(html or ""))
         if matched:
-            return matched.group(1).replace("\\/", "/")
+            value = matched.group(1).replace("\\/", "/")
+            if any(token in value for token in ["jx.zxzj", "player-v2", "/player", "/embed"]):
+                return value
         matched = re.search(r"player_[a-z0-9_]+\s*=\s*(\{[\s\S]*?\})\s*;?", str(html or ""), re.I)
         if not matched:
             return ""
@@ -469,7 +485,7 @@ class Spider(BaseSpider):
         except Exception:
             return ""
         value = str(payload.get("url") or "").replace("\\/", "/")
-        return value if "jx.zxzj" in value else ""
+        return value if any(token in value for token in ["jx.zxzj", "player-v2", "/player", "/embed"]) else ""
 
     def _extract_result_v2_data(self, html):
         matched = re.search(r"result_v2\s*=\s*(\{[\s\S]*?\})\s*;", str(html or ""))
@@ -493,11 +509,24 @@ class Spider(BaseSpider):
         if not iframe_url:
             return {"parse": 1, "jx": 1, "playUrl": "", "url": play_url, "header": self.headers}
 
-        iframe_html = self._request_html(iframe_url, referer=play_url)
+        iframe_headers = self._build_player_v2_headers() if "player-v2" in iframe_url else None
+        iframe_html = self._request_html(iframe_url, referer=play_url, extra_headers=iframe_headers)
         encrypted = self._extract_result_v2_data(iframe_html)
         final_url = self._decrypt_url(encrypted)
         if not final_url:
-            return {"parse": 1, "jx": 1, "playUrl": "", "url": play_url, "header": self.headers}
+            fallback_url = iframe_url if "player-v2" in iframe_url else play_url
+            fallback_header = (
+                {"Referer": play_url, "User-Agent": self.headers["User-Agent"]}
+                if fallback_url == iframe_url
+                else self.headers
+            )
+            return {
+                "parse": 1,
+                "jx": 1,
+                "playUrl": "",
+                "url": fallback_url,
+                "header": fallback_header,
+            }
         return {
             "parse": 0,
             "jx": 0,
