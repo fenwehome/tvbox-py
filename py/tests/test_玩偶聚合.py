@@ -348,3 +348,10 @@ class TestWanouAggregateSpider(unittest.TestCase):
         result = self.spider.searchContent("繁花", False, "1")
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["list"][0]["vod_name"], "繁花")
+
+    def test_home_content_does_not_expose_content_first_categories(self):
+        content = self.spider.homeContent(False)
+        self.assertNotIn("movie", [item["type_id"] for item in content["class"]])
+
+    def test_search_content_returns_empty_list_for_blank_keyword(self):
+        self.assertEqual(self.spider.searchContent("", False, "1"), {"page": 1, "total": 0, "list": []})
