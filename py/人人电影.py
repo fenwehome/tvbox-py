@@ -78,3 +78,53 @@ class Spider(BaseSpider):
         if any(re.search(pattern, raw, re.I) for pattern in self.excluded_pan_patterns):
             return False
         return any(re.search(pattern, raw, re.I) for pattern in self.supported_pan_patterns)
+
+    def _request_html(self, path_or_url):
+        target = path_or_url if str(path_or_url).startswith("http") else self._build_url(path_or_url)
+        response = self.fetch(target, headers=dict(self.headers), timeout=10)
+        if response.status_code != 200:
+            return ""
+        return response.text or ""
+
+    def _clean_text(self, text):
+        return re.sub(r"\s+", " ", str(text or "").replace("\xa0", " ")).strip()
+
+    def _parse_cards(self, html):
+        root = self.html(html)
+        if root is None:
+            return []
+
+        items = []
+        seen = set()
+        for node in root.xpath("//*[@id='movielist']//li"):
+            href = "".join(node.xpath(".//*[contains(@class,'intro')]//h2//a[1]/@href")).strip()
+            title = (
+                "".join(node.xpath(".//*[contains(@class,'intro')]//h2//a[1]/@title")).strip()
+                or "".join(node.xpath(".//*[contains(@class,'intro')]//h2//a[1]//text()")).strip()
+            )
+            pic = (
+                "".join(node.xpath(".//*[contains(@class,'pure-img')][1]/@data-original")).strip()
+                or "".join(node.xpath(".//*[contains(@class,'pure-img')][1]/@src")).strip()
+                or "".join(node.xpath(".//*[contains(@class,'pure-img')]//img[1]/@data-original")).strip()
+                or "".join(node.xpath(".//*[contains(@class,'pure-img')]//img[1]/@src")).strip()
+            )
+            remarks = self._clean_text("".join(node.xpath(".//*[contains(@class,'dou')][1]//text()")))
+            if not href or not title or href in seen:
+                continue
+            seen.add(href)
+            items.append(
+                {
+                    "vod_id": href,
+                    "vod_name": self._normalize_title(title),
+                    "vod_pic": self._build_url(pic),
+                    "vod_remarks": remarks,
+                }
+            )
+        return items
+
+    def categoryContent(self, tid, pg, filter, extend):
+        page = int(pg)
+        class_path = str(tid or "").lstrip("/")
+        url = self._build_url(f"{class_path}_{page}.html")
+        items = self._parse_cards(self._request_html(url))
+        return {"page": page, "limit": len(items), "total": page * 20 + len(items), "list": items}
