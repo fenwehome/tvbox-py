@@ -291,3 +291,60 @@ class TestWanouAggregateSpider(unittest.TestCase):
             vod["vod_play_url"],
             "百度资源$https://pan.baidu.com/s/b1$$$夸克资源$https://pan.quark.cn/s/q1$$$夸克资源$https://pan.quark.cn/s/q2",
         )
+
+    def test_player_content_passthroughs_known_pan_domains(self):
+        self.assertEqual(
+            self.spider.playerContent("quark#玩偶", "https://pan.quark.cn/s/demo", {}),
+            {"parse": 0, "playUrl": "", "url": "https://pan.quark.cn/s/demo"},
+        )
+        self.assertEqual(
+            self.spider.playerContent("baidu#玩偶", "https://pan.baidu.com/s/demo", {}),
+            {"parse": 0, "playUrl": "", "url": "https://pan.baidu.com/s/demo"},
+        )
+
+    def test_player_content_rejects_non_pan_url(self):
+        self.assertEqual(
+            self.spider.playerContent("zxzj", "/vodplay/1-1-1.html", {}),
+            {"parse": 0, "playUrl": "", "url": ""},
+        )
+
+    @patch.object(Spider, "_request_with_failover")
+    def test_fetch_site_search_builds_search_url_and_parses_results(self, mock_request_with_failover):
+        mock_request_with_failover.return_value = """
+        <div class="module-search-item">
+          <div class="video-serial" href="/voddetail/789.html" title="搜索影片"></div>
+          <div class="module-item-pic"><img data-src="/search.jpg" alt="搜索影片" /></div>
+          <div class="module-item-text">抢先版</div>
+        </div>
+        """
+        site = {
+            "id": "wanou",
+            "domains": ["https://www.wogg.net"],
+            "list_xpath": "//*[contains(@class,'module-item')]",
+            "search_xpath": "//*[contains(@class,'module-search-item')]",
+            "search_url": "/vodsearch/-------------.html?wd={keyword}&page={page}",
+        }
+        results = self.spider._fetch_site_search(site, "繁花", 1)
+        self.assertEqual(results[0]["vod_id"], "site:wanou:/voddetail/789.html")
+        self.assertEqual(results[0]["vod_name"], "搜索影片")
+
+    @patch.object(Spider, "_fetch_site_search")
+    def test_search_content_skips_site_errors(self, mock_fetch_site_search):
+        mock_fetch_site_search.side_effect = [
+            RuntimeError("boom"),
+            [
+                {
+                    "vod_id": "site:muou:/voddetail/2.html",
+                    "vod_name": "繁花",
+                    "vod_pic": "",
+                    "vod_remarks": "",
+                    "vod_year": "2024",
+                    "_site": "muou",
+                    "_detail_path": "/voddetail/2.html",
+                }
+            ],
+            [],
+        ]
+        result = self.spider.searchContent("繁花", False, "1")
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["list"][0]["vod_name"], "繁花")

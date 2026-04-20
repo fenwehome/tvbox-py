@@ -508,3 +508,9 @@ class Spider(BaseSpider):
                 }
             ]
         }
+
+    def playerContent(self, flag, id, vipFlags):
+        pan_type, _ = self._detect_pan_type(id)
+        if pan_type:
+            return {"parse": 0, "playUrl": "", "url": id}
+        return {"parse": 0, "playUrl": "", "url": ""}
