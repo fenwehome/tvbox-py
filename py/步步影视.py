@@ -232,7 +232,7 @@ class Spider(BaseSpider):
             videos = []
             for name in ("电影", "剧集", "综艺", "动漫"):
                 videos.extend(self._get_class_list(name, 1, {"by": "hits"}).get("list", []))
-            return {"page": 1, "limit": len(videos), "total": len(videos), "list": videos}
+            return {"page": 1, "limit": len(videos), "total": int(pg) * 30 + len(videos), "list": videos}
         return self._get_class_list(type_name, int(pg), extend or {})
 
     def detailContent(self, ids):
@@ -474,7 +474,7 @@ class Spider(BaseSpider):
             },
         )
         items = self._convert_json_to_vods(payload.get("data") or [])
-        return {"page": int(page), "limit": len(items), "total": len(items), "list": items}
+        return {"page": int(page), "limit": len(items), "total": page * 30 + len(items), "list": items}
 
     def _extract_decode_url(self, payload):
         if isinstance(payload, dict):
