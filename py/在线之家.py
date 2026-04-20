@@ -225,3 +225,157 @@ class Spider(BaseSpider):
         url = self._build_url("/vodsearch/{0}-------------.html".format(quote(str(key or "").strip())))
         items = self._parse_cards(self._request_html(url))
         return {"list": items, "page": page, "limit": len(items), "total": len(items)}
+
+    def _extract_actor_like_field(self, html, label):
+        matched = re.search(rf"{label}：</span>([\s\S]*?)</p>", str(html or ""))
+        if not matched:
+            return ""
+        texts = re.findall(r">([^<>]+)<", matched.group(1))
+        clean = [self._clean_text(text) for text in texts if self._clean_text(text)]
+        return ",".join(clean)
+
+    def _parse_detail_meta(self, html):
+        root = self.html(html)
+        if root is None:
+            return {}
+        title_line = self._clean_text(
+            "".join(root.xpath("//*[contains(@class,'stui-content__detail')]//*[contains(@class,'title')][1]//text()"))
+        )
+        title_match = re.match(r"^(.*?)(?:\s+(19\d{2}|20\d{2}))?(?:\s+([^\s]+))?(?:\s+([^\s]+))?$", title_line)
+        vod_name = self._clean_text(title_match.group(1) if title_match else title_line)
+        vod_year = self._clean_text(title_match.group(2) if title_match else "")
+        vod_area = self._clean_text(title_match.group(3) if title_match else "")
+        vod_class = self._clean_text(title_match.group(4) if title_match else "")
+        return {
+            "vod_name": vod_name,
+            "vod_year": vod_year,
+            "vod_area": vod_area,
+            "vod_class": vod_class,
+            "vod_pic": self._build_url(
+                ((root.xpath("//*[contains(@class,'stui-content__thumb')]//img/@data-original") or [""])[0]).strip()
+            ),
+            "vod_content": self._clean_text(
+                "".join(
+                    root.xpath(
+                        "//*[contains(concat(' ', normalize-space(@class), ' '), ' detail ')][1]//text()"
+                    )
+                )
+            ),
+            "vod_director": self._extract_actor_like_field(html, "导演"),
+            "vod_actor": self._extract_actor_like_field(html, "主演"),
+        }
+
+    def _extract_playlists(self, html):
+        root = self.html(html)
+        if root is None:
+            return {"normal": [], "pan": []}
+        tabs = [self._clean_text("".join(node.xpath(".//text()"))) for node in root.xpath("//*[contains(@class,'stui-vodlist__head')]//h3")]
+        playlists = root.xpath("//*[contains(@class,'stui-content__playlist')]")
+        normal = []
+        pan = []
+        for index, playlist in enumerate(playlists):
+            tab_name = tabs[index] if index < len(tabs) else ""
+            items = []
+            for anchor in playlist.xpath(".//a[@href]"):
+                href = ((anchor.xpath("./@href") or [""])[0]).strip()
+                name = self._clean_text("".join(anchor.xpath(".//text()"))) or "正片"
+                play_id = re.sub(r"^/+", "", href)
+                if not play_id:
+                    continue
+                items.append(
+                    {
+                        "name": name,
+                        "url": self._build_url(play_id),
+                        "play_id": play_id,
+                        "tab_name": tab_name,
+                    }
+                )
+            if any(keyword in tab_name for keyword in ["网盘", "百度", "夸克", "UC", "阿里", "迅雷"]):
+                pan.extend(items)
+            elif items:
+                normal.extend([f"{item['name']}${item['play_id']}" for item in items])
+        return {"normal": normal, "pan": pan}
+
+    def _extract_pan_url_from_play_page(self, html):
+        matched = re.search(r"player_[a-z0-9_]+\s*=\s*(\{[\s\S]*?\})\s*;?", str(html or ""), re.I)
+        if not matched:
+            return ""
+        try:
+            payload = json.loads(matched.group(1))
+        except Exception:
+            return ""
+        return str(payload.get("url") or "").strip()
+
+    def _detect_pan_type(self, tab_name, share_url):
+        text = str(share_url or "")
+        if "pan.baidu.com" in text:
+            return "baidu"
+        if "pan.quark.cn" in text:
+            return "quark"
+        if "drive.uc.cn" in text:
+            return "uc"
+        if "alipan.com" in text or "aliyundrive.com" in text:
+            return "aliyun"
+        if "pan.xunlei.com" in text:
+            return "xunlei"
+        name = str(tab_name or "").lower()
+        if "百度" in str(tab_name or ""):
+            return "baidu"
+        if "夸克" in str(tab_name or ""):
+            return "quark"
+        if "uc" in name:
+            return "uc"
+        if "阿里" in str(tab_name or "") or "aliyun" in name:
+            return "aliyun"
+        if "迅雷" in str(tab_name or ""):
+            return "xunlei"
+        return ""
+
+    def _extract_pan_groups(self, items):
+        grouped = {}
+        seen = set()
+        order = ["quark", "baidu", "uc", "aliyun", "xunlei"]
+        for item in items:
+            play_html = self._request_html(item["url"], referer=self.headers["Referer"])
+            share_url = self._extract_pan_url_from_play_page(play_html)
+            pan_type = self._detect_pan_type(item.get("tab_name", ""), share_url)
+            if not share_url or not pan_type:
+                continue
+            key = (pan_type, share_url)
+            if key in seen:
+                continue
+            seen.add(key)
+            grouped.setdefault(pan_type, []).append(f"{item['name']}${share_url}")
+        return [{"from": key, "urls": "#".join(grouped[key])} for key in order if grouped.get(key)]
+
+    def detailContent(self, ids):
+        raw_id = str(ids[0]).strip()
+        url = raw_id if raw_id.startswith("http") else self._build_url("/" + raw_id.lstrip("/"))
+        html = self._request_html(url)
+        meta = self._parse_detail_meta(html)
+        playlists = self._extract_playlists(html)
+        pan_groups = self._extract_pan_groups(playlists["pan"])
+        play_from = []
+        play_url = []
+        if playlists["normal"]:
+            play_from.append("zxzj")
+            play_url.append("#".join(playlists["normal"]))
+        for group in pan_groups:
+            play_from.append(group["from"])
+            play_url.append(group["urls"])
+        vod = {
+            "vod_id": raw_id,
+            "vod_name": meta.get("vod_name", ""),
+            "vod_pic": meta.get("vod_pic", ""),
+            "vod_content": meta.get("vod_content", ""),
+            "vod_remarks": "",
+            "vod_year": meta.get("vod_year", ""),
+            "vod_area": meta.get("vod_area", ""),
+            "vod_class": meta.get("vod_class", ""),
+            "vod_lang": "",
+            "vod_director": meta.get("vod_director", ""),
+            "vod_actor": meta.get("vod_actor", ""),
+            "vod_play_from": "$$$".join(play_from),
+            "vod_play_url": "$$$".join(play_url),
+        }
+        return {"list": [vod]}

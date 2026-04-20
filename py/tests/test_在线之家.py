@@ -98,6 +98,72 @@ class TestZXZJSpider(unittest.TestCase):
         self.assertEqual(result["list"][0]["vod_name"], "搜索命中")
         self.assertNotIn("pagecount", result)
 
+    def test_detect_pan_type_prefers_share_domain(self):
+        self.assertEqual(self.spider._detect_pan_type("百度网盘", "https://pan.quark.cn/s/demo"), "quark")
+        self.assertEqual(self.spider._detect_pan_type("资源链接", "https://drive.uc.cn/s/demo"), "uc")
+        self.assertEqual(self.spider._detect_pan_type("阿里网盘", "https://www.alipan.com/s/demo"), "aliyun")
+
+    @patch.object(Spider, "_request_html")
+    def test_detail_content_merges_zxzj_and_netdisk_groups(self, mock_request_html):
+        mock_request_html.side_effect = [
+            """
+            <div class="stui-content__thumb"><img data-original="/poster.jpg" /></div>
+            <div class="stui-content__detail">
+              <h1 class="title">示例剧 2025 日本 剧情</h1>
+              <p><span class="text-muted">导演：</span><a>导演甲</a></p>
+              <p><span class="text-muted">主演：</span><a>演员甲</a><a>演员乙</a></p>
+            </div>
+            <div class="detail">一段剧情简介</div>
+            <div class="stui-vodlist__head"><h3>在线播放</h3></div>
+            <ul class="stui-content__playlist clearfix">
+              <li><a href="/vodplay/999-1-1.html">第1集</a></li>
+              <li><a href="/vodplay/999-1-2.html">第2集</a></li>
+            </ul>
+            <div class="stui-vodlist__head"><h3>夸克网盘</h3></div>
+            <ul class="stui-content__playlist clearfix">
+              <li><a href="/vodplay/999-pan-1.html">夸克一</a></li>
+              <li><a href="/vodplay/999-pan-2.html">夸克二</a></li>
+            </ul>
+            <div class="stui-vodlist__head"><h3>百度云</h3></div>
+            <ul class="stui-content__playlist clearfix">
+              <li><a href="/vodplay/999-pan-bd.html">百度合集</a></li>
+            </ul>
+            """,
+            '<script>var player_aaaa={"url":"https://pan.quark.cn/s/q-demo"};</script>',
+            '<script>var player_aaaa={"url":"https://pan.quark.cn/s/q-demo"};</script>',
+            '<script>var player_aaaa={"url":"https://pan.baidu.com/s/b-demo"};</script>',
+        ]
+        result = self.spider.detailContent(["voddetail/999.html"])
+        vod = result["list"][0]
+        self.assertEqual(vod["vod_id"], "voddetail/999.html")
+        self.assertEqual(vod["vod_name"], "示例剧")
+        self.assertEqual(vod["vod_pic"], "https://www.zxzjhd.com/poster.jpg")
+        self.assertEqual(vod["vod_year"], "2025")
+        self.assertEqual(vod["vod_area"], "日本")
+        self.assertEqual(vod["vod_class"], "剧情")
+        self.assertEqual(vod["vod_director"], "导演甲")
+        self.assertEqual(vod["vod_actor"], "演员甲,演员乙")
+        self.assertEqual(vod["vod_content"], "一段剧情简介")
+        self.assertEqual(vod["vod_play_from"], "zxzj$$$quark$$$baidu")
+        self.assertEqual(
+            vod["vod_play_url"],
+            "第1集$vodplay/999-1-1.html#第2集$vodplay/999-1-2.html$$$夸克一$https://pan.quark.cn/s/q-demo$$$百度合集$https://pan.baidu.com/s/b-demo",
+        )
+
+    @patch.object(Spider, "_request_html")
+    def test_extract_pan_groups_skips_invalid_or_unknown_links(self, mock_request_html):
+        mock_request_html.side_effect = [
+            '<script>var player_aaaa={"url":"https://example.com/not-pan"};</script>',
+            '<html><body>empty</body></html>',
+        ]
+        groups = self.spider._extract_pan_groups(
+            [
+                {"name": "无效一", "url": "https://www.zxzjhd.com/vodplay/x-1.html", "tab_name": "网盘资源"},
+                {"name": "无效二", "url": "https://www.zxzjhd.com/vodplay/x-2.html", "tab_name": "网盘资源"},
+            ]
+        )
+        self.assertEqual(groups, [])
+
 
 if __name__ == "__main__":
     unittest.main()
