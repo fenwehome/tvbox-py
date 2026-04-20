@@ -1,8 +1,8 @@
-# 人人电影网 Python 爬虫设计
+# 人人电影 Python 爬虫设计
 
 ## 目标
 
-在当前 Python 仓库中新增一个符合 `base.spider.Spider` 接口的人人电影网爬虫，覆盖以下能力：
+在当前 Python 仓库中新增一个符合 `base.spider.Spider` 接口的人人电影爬虫，覆盖以下能力：
 
 - 首页分类
 - 分类列表
@@ -16,7 +16,7 @@
 
 本次实现包含：
 
-- 新增独立脚本，文件名为 `人人电影网.py`
+- 新增独立脚本，文件名为 `人人电影.py`
 - 使用单一站点主域：`https://www.rrdynb.com`
 - 支持 `home/category/detail/search/player` 主链路
 - 首页返回固定四分类
@@ -254,7 +254,7 @@
 
 测试文件：
 
-- `py/tests/test_人人电影网.py`
+- `py/tests/test_人人电影.py`
 
 测试采用内嵌 HTML fixture 与 `unittest.mock`，不访问真实网络。
 
@@ -292,7 +292,7 @@
 
 满足以下条件时，认为本次设计对应的实现完成：
 
-- 新增 `人人电影网.py` 并符合仓库 `Spider` 接口
+- 新增 `人人电影.py` 并符合仓库 `Spider` 接口
 - 固定四分类、分类列表、搜索、详情和网盘透传链路可用
 - 详情页只输出网盘线路，不输出站内播放线路
 - 分类和搜索结果不返回 `pagecount`
