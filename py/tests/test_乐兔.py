@@ -1,6 +1,8 @@
 import unittest
+import base64
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from urllib.parse import quote
 from unittest.mock import patch
 
 
@@ -134,6 +136,46 @@ class TestLeTuSpider(unittest.TestCase):
         mock_request_html.return_value = "<h1>详情标题</h1>"
         self.spider.detailContent(["detail/demo"])
         self.assertEqual(mock_request_html.call_args.args[0], "https://www.letu.me/detail/demo.html")
+
+    @patch.object(Spider, "_request_html")
+    def test_player_content_returns_direct_json_url(self, mock_request_html):
+        mock_request_html.return_value = '{"code":200,"url":"https://video.example/direct.m3u8"}'
+        result = self.spider.playerContent("线路A", "play/123-1-1", {})
+        self.assertEqual(result["parse"], 0)
+        self.assertEqual(result["jx"], 0)
+        self.assertEqual(result["url"], "https://video.example/direct.m3u8")
+
+    @patch.object(Spider, "_request_html")
+    def test_player_content_decodes_rose_base64_url(self, mock_request_html):
+        encoded = quote(base64.b64encode(b"https://video.example/rose.m3u8").decode("utf-8"))
+        mock_request_html.return_value = '{"code":200,"url":"rose_' + encoded + '"}'
+        result = self.spider.playerContent("线路A", "play/123-1-1", {})
+        self.assertEqual(result["parse"], 0)
+        self.assertEqual(result["url"], "https://video.example/rose.m3u8")
+
+    def test_extract_player_data_reads_player_json(self):
+        html = '<script>var player_aaaa={"url":"https%3A%2F%2Fvideo.example%2Fenc1.m3u8","encrypt":"1"};</script>'
+        self.assertEqual(self.spider._extract_player_data(html)["encrypt"], "1")
+
+    @patch.object(Spider, "_request_html")
+    def test_player_content_supports_encrypt_1_and_encrypt_2(self, mock_request_html):
+        encoded = quote(base64.b64encode(b"https://video.example/enc2.m3u8").decode("utf-8"))
+        mock_request_html.side_effect = [
+            '<script>var player_aaaa={"url":"https%3A%2F%2Fvideo.example%2Fenc1.m3u8","encrypt":"1"};</script>',
+            '<script>var player_aaaa={"url":"' + encoded + '","encrypt":"2"};</script>',
+        ]
+        encrypt_1 = self.spider.playerContent("线路A", "play/123-1-1", {})
+        encrypt_2 = self.spider.playerContent("线路A", "play/123-1-2", {})
+        self.assertEqual(encrypt_1["url"], "https://video.example/enc1.m3u8")
+        self.assertEqual(encrypt_2["url"], "https://video.example/enc2.m3u8")
+
+    @patch.object(Spider, "_request_html")
+    def test_player_content_falls_back_to_system_parse(self, mock_request_html):
+        mock_request_html.return_value = "<html></html>"
+        result = self.spider.playerContent("线路A", "play/123-1-1", {})
+        self.assertEqual(result["parse"], 1)
+        self.assertEqual(result["jx"], 1)
+        self.assertEqual(result["url"], "https://www.letu.me/play/123-1-1.html")
 
 
 if __name__ == "__main__":

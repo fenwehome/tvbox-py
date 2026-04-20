@@ -1,7 +1,9 @@
 # coding=utf-8
+import base64
+import json
 import re
 import sys
-from urllib.parse import quote, urljoin
+from urllib.parse import quote, unquote, urljoin
 
 from base.spider import Spider as BaseSpider
 
@@ -203,3 +205,54 @@ class Spider(BaseSpider):
             parsed = self._parse_detail_page(self._request_html(detail_url), vod_id)
             result["list"].extend(parsed.get("list", []))
         return result
+
+    def _base64_decode(self, value):
+        text = re.sub(r"\s+", "", str(value or ""))
+        text += "=" * ((4 - len(text) % 4) % 4)
+        try:
+            return base64.b64decode(text).decode("utf-8")
+        except Exception:
+            return ""
+
+    def _decode_rose_url(self, value):
+        raw = str(value or "")[5:]
+        decoded = self._base64_decode(unquote(raw))
+        if decoded:
+            return decoded
+        return self._base64_decode(raw)
+
+    def _extract_player_data(self, html):
+        matched = re.search(r"player_[a-z0-9]+\s*=\s*(\{[\s\S]*?\})", str(html or ""), re.I)
+        if not matched:
+            return None
+        try:
+            return json.loads(matched.group(1))
+        except Exception:
+            return None
+
+    def playerContent(self, flag, id, vipFlags):
+        play_url = self._decode_play_id(id) or self._build_url(id)
+        body = self._request_html(play_url)
+        try:
+            payload = json.loads(body)
+        except Exception:
+            payload = None
+        if isinstance(payload, dict) and str(payload.get("code")) == "200" and payload.get("url"):
+            video_url = str(payload.get("url"))
+            if video_url.startswith("rose_"):
+                video_url = self._decode_rose_url(video_url)
+            elif video_url.startswith("/"):
+                video_url = self._build_url(video_url)
+            if video_url:
+                return {"parse": 0, "jx": 0, "url": video_url, "header": dict(self.headers)}
+        player = self._extract_player_data(body)
+        if player:
+            video_url = str(player.get("url") or "")
+            encrypt = str(player.get("encrypt") or "")
+            if encrypt == "1":
+                video_url = unquote(video_url)
+            elif encrypt == "2":
+                video_url = self._base64_decode(unquote(video_url))
+            if video_url:
+                return {"parse": 0, "jx": 0, "url": video_url, "header": dict(self.headers)}
+        return {"parse": 1, "jx": 1, "url": play_url, "header": dict(self.headers)}
