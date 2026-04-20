@@ -193,3 +193,21 @@ class TestJingyuSpider(unittest.TestCase):
         vod = result["list"][0]
         self.assertIn("1线", vod["vod_play_from"])
         self.assertIn("正式线路", vod["vod_play_from"])
+
+    def test_search_content_filters_and_maps_results(self):
+        search_data = {
+            "search_list": [
+                {"vod_id": "1", "vod_name": "繁花", "vod_pic": "http://p1.jpg",
+                 "vod_remarks": "更新中", "vod_class": "都市", "vod_year": "2024"},
+                {"vod_id": "2", "vod_name": "花繁", "vod_pic": "http://p2.jpg",
+                 "vod_remarks": "", "vod_class": "屏蔽预留", "vod_year": ""},
+            ]
+        }
+
+        self.spider._api_post = lambda ep, payload=None: search_data
+        self.spider.host = "http://test.com"
+        self.spider.init_data = {}
+        result = self.spider.searchContent("繁花", False, "1")
+        self.assertEqual(len(result["list"]), 1)
+        self.assertEqual(result["list"][0]["vod_name"], "繁花")
+        self.assertNotIn("pagecount", result)

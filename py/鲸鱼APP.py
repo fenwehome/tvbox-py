@@ -294,3 +294,61 @@ class Spider(BaseSpider):
                 "vod_play_url": "$$$".join(l["urls"] for l in lines),
             }]
         }
+
+    def _get_verify_code(self):
+        import uuid
+        try:
+            uid = str(uuid.uuid4())
+            verify_url = f"{self.host}{self.api_path}/verify/create?key={uid}"
+            rsp = self.fetch(verify_url, headers={"User-Agent": self.ua},
+                             timeout=10, verify=False)
+            b64_img = base64.b64encode(rsp.content).decode("utf-8")
+            ocr_url = "http://154.222.22.188:9898/ocr/b64/text"
+            ocr_rsp = self.post(ocr_url, data=b64_img,
+                                headers={"User-Agent": self.ua, "Content-Type": "text/plain"},
+                                timeout=10, verify=False)
+            code = (ocr_rsp.text or "").strip()
+            if not code:
+                return None
+            replacements = {
+                "y": "9", "口": "0", "q": "0", "u": "0", "o": "0",
+                ">": "1", "d": "0", "b": "8", "已": "2", "D": "0", "五": "5",
+            }
+            code = "".join(replacements.get(c, c) for c in code)
+            if not re.match(r"^\d{4}$", code):
+                return None
+            return {"uuid": uid, "code": code}
+        except Exception as e:
+            self.log(f"验证码获取失败: {e}")
+            return None
+
+    def searchContent(self, key, quick, pg="1"):
+        self.init()
+        payload = {"keywords": key, "type_id": "0", "page": str(pg)}
+        if self.search_verify:
+            verify = self._get_verify_code()
+            if verify:
+                payload["code"] = verify["code"]
+                payload["key"] = verify["uuid"]
+        res = self._api_post(self.search_endpoint, payload)
+        if not res:
+            return {"list": [], "page": int(pg), "limit": 90, "total": 999999}
+        raw = res.get("search_list", [])
+        filtered = [i for i in raw if "屏蔽预留" not in (i.get("vod_class") or "").lower()]
+        kw = (key or "").strip().lower()
+        if kw:
+            filtered = [
+                i for i in filtered
+                if kw in " ".join([
+                    i.get("vod_name", ""),
+                    i.get("vod_remarks", ""),
+                    i.get("vod_class", ""),
+                ]).lower()
+            ]
+        items = [{
+            "vod_id": str(i.get("vod_id", "")),
+            "vod_name": i.get("vod_name", ""),
+            "vod_pic": i.get("vod_pic", ""),
+            "vod_remarks": f"{i.get('vod_year', '')} {i.get('vod_class', '')}".strip(),
+        } for i in filtered]
+        return {"list": items, "page": int(pg), "limit": 90, "total": 999999}
