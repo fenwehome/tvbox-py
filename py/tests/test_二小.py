@@ -33,7 +33,7 @@ class TestErXiaoSpider(unittest.TestCase):
     def test_build_url_and_detect_pan_type(self):
         self.assertEqual(
             self.spider._build_url("/index.php/vod/detail/id/1.html"),
-            "http://2xiaopan.fun/index.php/vod/detail/id/1.html",
+            f"{self.spider.host}/index.php/vod/detail/id/1.html",
         )
         self.assertEqual(self.spider._detect_pan_type("https://pan.baidu.com/s/demo"), ("baidu", "百度资源"))
         self.assertEqual(self.spider._detect_pan_type("https://pan.quark.cn/s/demo"), ("quark", "夸克资源"))
@@ -58,10 +58,52 @@ class TestErXiaoSpider(unittest.TestCase):
                 {
                     "vod_id": "/index.php/vod/detail/id/123.html",
                     "vod_name": "示例影片",
-                    "vod_pic": "http://2xiaopan.fun/poster.jpg",
+                    "vod_pic": f"{self.spider.host}/poster.jpg",
                     "vod_remarks": "HD",
                     "vod_year": "2025",
                 }
+            ],
+        )
+
+    def test_parse_cards_ignores_module_items_wrapper_and_keeps_each_card_separate(self):
+        html = """
+        <div id="main">
+          <div class="module-items">
+            <div class="module-item">
+              <div class="module-item-pic">
+                <a href="/index.php/vod/detail/id/111.html"></a>
+                <img data-src="/poster-1.jpg" alt="影片一" />
+              </div>
+              <div class="module-item-text">HD</div>
+            </div>
+            <div class="module-item">
+              <div class="module-item-pic">
+                <a href="/index.php/vod/detail/id/222.html"></a>
+                <img data-src="/poster-2.jpg" alt="影片二" />
+              </div>
+              <div class="module-item-text">更新至2集</div>
+            </div>
+          </div>
+        </div>
+        """
+        cards = self.spider._parse_cards(html)
+        self.assertEqual(
+            cards,
+            [
+                {
+                    "vod_id": "/index.php/vod/detail/id/111.html",
+                    "vod_name": "影片一",
+                    "vod_pic": f"{self.spider.host}/poster-1.jpg",
+                    "vod_remarks": "HD",
+                    "vod_year": "",
+                },
+                {
+                    "vod_id": "/index.php/vod/detail/id/222.html",
+                    "vod_name": "影片二",
+                    "vod_pic": f"{self.spider.host}/poster-2.jpg",
+                    "vod_remarks": "更新至2集",
+                    "vod_year": "",
+                },
             ],
         )
 
@@ -82,7 +124,7 @@ class TestErXiaoSpider(unittest.TestCase):
         result = self.spider.categoryContent("2", "3", False, {})
         self.assertEqual(
             mock_request_html.call_args.args[0],
-            "http://2xiaopan.fun/index.php/vod/show/id/2/page/3.html",
+            f"{self.spider.host}/index.php/vod/show/id/2/page/3.html",
         )
         self.assertEqual(result["page"], 3)
         self.assertEqual(result["limit"], 1)
@@ -102,14 +144,14 @@ class TestErXiaoSpider(unittest.TestCase):
         result = self.spider.searchContent("繁花", False, "2")
         self.assertEqual(
             mock_request_html.call_args.args[0],
-            "http://2xiaopan.fun/index.php/vod/search/page/2/wd/%E7%B9%81%E8%8A%B1.html",
+            f"{self.spider.host}/index.php/vod/search/page/2/wd/%E7%B9%81%E8%8A%B1.html",
         )
         self.assertEqual(
             result["list"][0],
             {
                 "vod_id": "/index.php/vod/detail/id/789.html",
                 "vod_name": "搜索影片",
-                "vod_pic": "http://2xiaopan.fun/search.jpg",
+                "vod_pic": f"{self.spider.host}/search.jpg",
                 "vod_remarks": "抢先版",
             },
         )
@@ -149,12 +191,25 @@ class TestErXiaoSpider(unittest.TestCase):
         """
         detail = self.spider._parse_detail_page("/index.php/vod/detail/id/123.html", html)
         self.assertEqual(detail["vod_name"], "示例剧")
-        self.assertEqual(detail["vod_pic"], "http://2xiaopan.fun/poster.jpg")
+        self.assertEqual(detail["vod_pic"], f"{self.spider.host}/poster.jpg")
         self.assertEqual(detail["vod_year"], "2024")
         self.assertEqual(detail["vod_director"], "导演甲")
         self.assertEqual(detail["vod_actor"], "演员甲,演员乙")
         self.assertEqual(detail["vod_content"], "一段剧情简介")
         self.assertEqual(detail["pan_urls"], ["https://pan.quark.cn/s/q1", "https://pan.baidu.com/s/b1"])
+
+    def test_parse_detail_page_uses_only_first_mobile_play_poster(self):
+        html = """
+        <div class="page-title">示例剧</div>
+        <div class="mobile-play"><img class="lazyload" data-src="/poster-main.jpg" /></div>
+        <div class="mobile-play"><img class="lazyload" data-src="https://img.example.com/side.webp" /></div>
+        <div class="mobile-play"><img class="lazyload" data-src="https://img.example.com/recommend.jpg" /></div>
+        <div class="module-row-info">
+          <p>https://pan.baidu.com/s/b1</p>
+        </div>
+        """
+        detail = self.spider._parse_detail_page("/index.php/vod/detail/id/123.html", html)
+        self.assertEqual(detail["vod_pic"], f"{self.spider.host}/poster-main.jpg")
 
     @patch.object(Spider, "_request_html")
     def test_detail_content_builds_pan_play_fields(self, mock_request_html):

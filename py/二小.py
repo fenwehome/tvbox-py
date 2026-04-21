@@ -67,6 +67,9 @@ class Spider(BaseSpider):
     def _clean_text(self, text):
         return re.sub(r"\s+", " ", str(text or "").replace("\xa0", " ")).strip()
 
+    def _class_xpath(self, class_name):
+        return f"contains(concat(' ', normalize-space(@class), ' '), ' {class_name} ')"
+
     def _detect_pan_type(self, url):
         raw = str(url or "").strip()
         for pan_type, title, pattern in self.pan_patterns:
@@ -92,15 +95,19 @@ class Spider(BaseSpider):
 
         items = []
         seen = set()
-        for node in root.xpath("//*[@id='main']//*[contains(@class,'module-item')]"):
-            href = "".join(node.xpath(".//*[contains(@class,'module-item-pic')]//a[1]/@href")).strip()
-            title = "".join(node.xpath(".//*[contains(@class,'module-item-pic')]//img[1]/@alt")).strip()
+        item_xpath = self._class_xpath("module-item")
+        pic_box_xpath = self._class_xpath("module-item-pic")
+        text_xpath = self._class_xpath("module-item-text")
+        caption_xpath = self._class_xpath("module-item-caption")
+        for node in root.xpath(f"//*[@id='main']//*[{item_xpath}]"):
+            href = "".join(node.xpath(f".//*[{pic_box_xpath}]//a[1]/@href")).strip()
+            title = "".join(node.xpath(f".//*[{pic_box_xpath}]//img[1]/@alt")).strip()
             pic = (
-                "".join(node.xpath(".//*[contains(@class,'module-item-pic')]//img[1]/@data-src")).strip()
-                or "".join(node.xpath(".//*[contains(@class,'module-item-pic')]//img[1]/@src")).strip()
+                "".join(node.xpath(f".//*[{pic_box_xpath}]//img[1]/@data-src")).strip()
+                or "".join(node.xpath(f".//*[{pic_box_xpath}]//img[1]/@src")).strip()
             )
-            remarks = self._clean_text("".join(node.xpath(".//*[contains(@class,'module-item-text')][1]//text()")))
-            year = self._clean_text("".join(node.xpath(".//*[contains(@class,'module-item-caption')][1]//span[1]//text()")))
+            remarks = self._clean_text("".join(node.xpath(f".//*[{text_xpath}][1]//text()")))
+            year = self._clean_text("".join(node.xpath(f".//*[{caption_xpath}][1]//span[1]//text()")))
             if not href or not title or href in seen:
                 continue
             seen.add(href)
@@ -131,16 +138,20 @@ class Spider(BaseSpider):
             return {"page": page, "total": 0, "list": []}
 
         items = []
-        for node in root.xpath("//*[contains(@class,'module-search-item')]"):
-            href = "".join(node.xpath(".//*[contains(@class,'video-serial')][1]/@href")).strip()
-            title = "".join(node.xpath(".//*[contains(@class,'video-serial')][1]/@title")).strip()
+        search_item_xpath = self._class_xpath("module-search-item")
+        video_serial_xpath = self._class_xpath("video-serial")
+        pic_box_xpath = self._class_xpath("module-item-pic")
+        text_xpath = self._class_xpath("module-item-text")
+        for node in root.xpath(f"//*[{search_item_xpath}]"):
+            href = "".join(node.xpath(f".//*[{video_serial_xpath}][1]/@href")).strip()
+            title = "".join(node.xpath(f".//*[{video_serial_xpath}][1]/@title")).strip()
             pic = (
-                "".join(node.xpath(".//*[contains(@class,'module-item-pic')]//img[1]/@data-src")).strip()
-                or "".join(node.xpath(".//*[contains(@class,'module-item-pic')]//img[1]/@src")).strip()
+                "".join(node.xpath(f".//*[{pic_box_xpath}]//img[1]/@data-src")).strip()
+                or "".join(node.xpath(f".//*[{pic_box_xpath}]//img[1]/@src")).strip()
             )
             remarks = self._clean_text(
-                "".join(node.xpath(".//*[contains(@class,'video-serial')][1]//text()"))
-                or "".join(node.xpath(".//*[contains(@class,'module-item-text')][1]//text()"))
+                "".join(node.xpath(f".//*[{video_serial_xpath}][1]//text()"))
+                or "".join(node.xpath(f".//*[{text_xpath}][1]//text()"))
             )
             if not href or not title:
                 continue
@@ -168,17 +179,23 @@ class Spider(BaseSpider):
                 "pan_urls": [],
             }
 
+        mobile_play_xpath = self._class_xpath("mobile-play")
+        lazyload_xpath = self._class_xpath("lazyload")
+        page_title_xpath = self._class_xpath("page-title")
+        info_title_xpath = self._class_xpath("video-info-itemtitle")
+        row_info_xpath = self._class_xpath("module-row-info")
+
+        pic_candidates = root.xpath(
+            "("
+            f"//*[{mobile_play_xpath}]//*[{lazyload_xpath}]/@data-src | "
+            f"//*[{mobile_play_xpath}]//*[{lazyload_xpath}]/@src"
+            ")[1]"
+        )
+
         detail = {
             "vod_id": vod_id,
-            "vod_name": self._clean_text("".join(root.xpath("//*[contains(@class,'page-title')][1]//text()"))),
-            "vod_pic": self._build_url(
-                "".join(
-                    root.xpath(
-                        "//*[contains(@class,'mobile-play')]//*[contains(@class,'lazyload')][1]/@data-src | "
-                        "//*[contains(@class,'mobile-play')]//*[contains(@class,'lazyload')][1]/@src"
-                    )
-                ).strip()
-            ),
+            "vod_name": self._clean_text("".join(root.xpath(f"//*[{page_title_xpath}][1]//text()"))),
+            "vod_pic": self._build_url((pic_candidates[0] if pic_candidates else "").strip()),
             "vod_year": "",
             "vod_director": "",
             "vod_actor": "",
@@ -186,7 +203,7 @@ class Spider(BaseSpider):
             "pan_urls": [],
         }
 
-        for label_node in root.xpath("//*[contains(@class,'video-info-itemtitle')]"):
+        for label_node in root.xpath(f"//*[{info_title_xpath}]"):
             key = self._clean_text("".join(label_node.xpath(".//text()")))
             sibling = label_node.getnext()
             if sibling is None:
@@ -203,7 +220,7 @@ class Spider(BaseSpider):
             elif "剧情" in key:
                 detail["vod_content"] = text_value
 
-        for node in root.xpath("//*[contains(@class,'module-row-info')]//p"):
+        for node in root.xpath(f"//*[{row_info_xpath}]//p"):
             text = self._clean_text("".join(node.xpath(".//text()")))
             if text:
                 detail["pan_urls"].append(text)

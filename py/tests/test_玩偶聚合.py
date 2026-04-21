@@ -18,15 +18,23 @@ class TestWanouAggregateSpider(unittest.TestCase):
         self.spider = Spider()
         self.spider.init()
 
-    def test_home_content_exposes_site_classes_and_category_filter(self):
+    def test_home_content_exposes_recommend_and_site_classes_in_priority_order(self):
         content = self.spider.homeContent(False)
         self.assertEqual(
-            [item["type_id"] for item in content["class"][:3]],
-            ["site_wanou", "site_zhizhen", "site_shandian"],
+            [item["type_id"] for item in content["class"][:6]],
+            [
+                "site_recommend",
+                "site_wanou",
+                "site_muou",
+                "site_labi",
+                "site_zhizhen",
+                "site_erxiao",
+            ],
         )
-        self.assertEqual(content["class"][0]["type_name"], "玩偶")
+        self.assertEqual(content["class"][0]["type_name"], "推荐")
         self.assertEqual(content["filters"]["site_wanou"][0]["key"], "categoryId")
-        self.assertEqual(content["filters"]["site_wanou"][0]["value"][1], {"n": "电影", "v": "1"})
+        self.assertEqual(content["filters"]["site_wanou"][0]["value"][1], {"n": "臻彩", "v": "44"})
+        self.assertEqual(content["filters"]["site_recommend"][0]["value"][0], {"n": "全部", "v": "all"})
 
     def test_home_content_exposes_zhizhen_site_and_categories(self):
         content = self.spider.homeContent(False)
@@ -35,40 +43,58 @@ class TestWanouAggregateSpider(unittest.TestCase):
         self.assertEqual(
             content["filters"]["site_zhizhen"][0]["value"][1:],
             [
+                {"n": "臻彩", "v": "26"},
                 {"n": "电影", "v": "1"},
-                {"n": "剧集", "v": "2"},
+                {"n": "电视剧", "v": "2"},
                 {"n": "动漫", "v": "3"},
                 {"n": "综艺", "v": "4"},
                 {"n": "短剧", "v": "5"},
                 {"n": "老剧", "v": "24"},
-                {"n": "严选", "v": "26"},
             ],
         )
 
-    def test_home_content_exposes_shandian_site_and_categories(self):
+    def test_home_content_exposes_muou_site_and_categories(self):
         content = self.spider.homeContent(False)
         type_ids = [item["type_id"] for item in content["class"]]
-        self.assertIn("site_shandian", type_ids)
+        self.assertIn("site_muou", type_ids)
         self.assertEqual(
-            content["filters"]["site_shandian"][0]["value"][1:],
+            content["filters"]["site_muou"][0]["value"][1:],
             [
+                {"n": "臻选", "v": "25"},
                 {"n": "电影", "v": "1"},
-                {"n": "剧集", "v": "2"},
+                {"n": "电视剧", "v": "2"},
+                {"n": "动漫", "v": "3"},
+                {"n": "纪录片", "v": "4"},
+                {"n": "综艺", "v": "29"},
+                {"n": "原盘", "v": "30"},
+            ],
+        )
+
+    def test_home_content_exposes_kuaiying_and_ouge_site_categories(self):
+        content = self.spider.homeContent(False)
+        type_ids = [item["type_id"] for item in content["class"]]
+        self.assertIn("site_kuaiying", type_ids)
+        self.assertIn("site_ouge", type_ids)
+        self.assertEqual(
+            content["filters"]["site_kuaiying"][0]["value"][1:],
+            [
+                {"n": "臻彩", "v": "5"},
+                {"n": "电影", "v": "1"},
+                {"n": "电视剧", "v": "2"},
                 {"n": "综艺", "v": "3"},
                 {"n": "动漫", "v": "4"},
-                {"n": "短剧", "v": "30"},
+                {"n": "短剧", "v": "6"},
+                {"n": "115", "v": "30"},
+                {"n": "123", "v": "35"},
+                {"n": "天移迅", "v": "36"},
             ],
         )
-
-    def test_home_content_exposes_ouge_site_and_categories(self):
-        content = self.spider.homeContent(False)
-        type_ids = [item["type_id"] for item in content["class"]]
-        self.assertIn("site_ouge", type_ids)
+        self.assertEqual(content["class"][-1]["type_name"], "欧哥")
         self.assertEqual(
             content["filters"]["site_ouge"][0]["value"][1:],
             [
                 {"n": "电影", "v": "1"},
-                {"n": "剧集", "v": "2"},
+                {"n": "电视剧", "v": "2"},
                 {"n": "动漫", "v": "3"},
                 {"n": "综艺", "v": "4"},
                 {"n": "短剧", "v": "5"},
@@ -182,6 +208,53 @@ class TestWanouAggregateSpider(unittest.TestCase):
             ],
         )
 
+    def test_parse_cards_ignores_module_items_wrapper(self):
+        site = {"id": "erxiao", "domains": ["https://www.2xiaopan.top"], "list_xpath": "//*[contains(@class,'module-item')]"}
+        html = """
+        <div id="main">
+          <div class="module-items">
+            <div class="module-item">
+              <div class="module-item-pic">
+                <a href="/index.php/vod/detail/id/111.html"></a>
+                <img data-src="/poster-1.jpg" alt="影片一" />
+              </div>
+              <div class="module-item-text">HD</div>
+            </div>
+            <div class="module-item">
+              <div class="module-item-pic">
+                <a href="/index.php/vod/detail/id/222.html"></a>
+                <img data-src="/poster-2.jpg" alt="影片二" />
+              </div>
+              <div class="module-item-text">更新至2集</div>
+            </div>
+          </div>
+        </div>
+        """
+        cards = self.spider._parse_cards(site, html)
+        self.assertEqual(
+            cards,
+            [
+                {
+                    "vod_id": "site:erxiao:/index.php/vod/detail/id/111.html",
+                    "vod_name": "影片一",
+                    "vod_pic": "https://www.2xiaopan.top/poster-1.jpg",
+                    "vod_remarks": "HD",
+                    "vod_year": "",
+                    "_site": "erxiao",
+                    "_detail_path": "/index.php/vod/detail/id/111.html",
+                },
+                {
+                    "vod_id": "site:erxiao:/index.php/vod/detail/id/222.html",
+                    "vod_name": "影片二",
+                    "vod_pic": "https://www.2xiaopan.top/poster-2.jpg",
+                    "vod_remarks": "更新至2集",
+                    "vod_year": "",
+                    "_site": "erxiao",
+                    "_detail_path": "/index.php/vod/detail/id/222.html",
+                },
+            ],
+        )
+
     @patch.object(Spider, "_request_with_failover")
     def test_category_content_uses_default_category_when_extend_missing(self, mock_request_with_failover):
         mock_request_with_failover.return_value = """
@@ -196,6 +269,37 @@ class TestWanouAggregateSpider(unittest.TestCase):
         result = self.spider.categoryContent("site_wanou", "2", False, {})
         self.assertEqual(result["page"], 2)
         self.assertEqual(result["list"][0]["vod_name"], "分类影片")
+
+    @patch.object(Spider, "_fetch_site_home_recommend")
+    def test_category_content_returns_recommend_results_with_site_tags(self, mock_fetch_site_home_recommend):
+        mock_fetch_site_home_recommend.side_effect = lambda site, limit=30: {
+            "wanou": [
+                {
+                    "vod_id": "site:wanou:/voddetail/1.html",
+                    "vod_name": "繁花",
+                    "vod_pic": "https://img.example/w.jpg",
+                    "vod_remarks": "玩偶版",
+                    "vod_year": "2024",
+                    "_site": "wanou",
+                    "_detail_path": "/voddetail/1.html",
+                }
+            ],
+            "muou": [
+                {
+                    "vod_id": "site:muou:/voddetail/2.html",
+                    "vod_name": "繁花",
+                    "vod_pic": "https://img.example/m.jpg",
+                    "vod_remarks": "木偶版",
+                    "vod_year": "2024",
+                    "_site": "muou",
+                    "_detail_path": "/voddetail/2.html",
+                }
+            ],
+        }.get(site["id"], [])
+        result = self.spider.categoryContent("site_recommend", "1", False, {"recommendSite": "all"})
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["list"][0]["vod_name"], "繁花")
+        self.assertEqual(result["list"][0]["vod_remarks"], "[玩偶] 玩偶版")
 
     def test_aggregate_search_results_merges_same_title_and_keeps_highest_priority_source(self):
         raw_results = [
@@ -247,8 +351,8 @@ class TestWanouAggregateSpider(unittest.TestCase):
 
     @patch.object(Spider, "_fetch_site_search")
     def test_search_content_queries_sites_and_returns_aggregated_items(self, mock_fetch_site_search):
-        mock_fetch_site_search.side_effect = [
-            [
+        results_by_site = {
+            "wanou": [
                 {
                     "vod_id": "site:wanou:/voddetail/1.html",
                     "vod_name": "繁花",
@@ -259,7 +363,7 @@ class TestWanouAggregateSpider(unittest.TestCase):
                     "_detail_path": "/voddetail/1.html",
                 }
             ],
-            [
+            "muou": [
                 {
                     "vod_id": "site:muou:/voddetail/2.html",
                     "vod_name": "繁花",
@@ -270,8 +374,8 @@ class TestWanouAggregateSpider(unittest.TestCase):
                     "_detail_path": "/voddetail/2.html",
                 }
             ],
-            [],
-        ]
+        }
+        mock_fetch_site_search.side_effect = lambda site, keyword, page: results_by_site.get(site["id"], [])
         result = self.spider.searchContent("繁花", False, "1")
         self.assertEqual(len(result["list"]), 1)
         self.assertEqual(result["list"][0]["vod_name"], "繁花")
@@ -346,8 +450,20 @@ class TestWanouAggregateSpider(unittest.TestCase):
             {"parse": 0, "playUrl": "", "url": "https://pan.quark.cn/s/demo"},
         )
         self.assertEqual(
+            self.spider.playerContent("quark#玩偶", "https://www.quark.cn/s/demo", {}),
+            {"parse": 0, "playUrl": "", "url": "https://www.quark.cn/s/demo"},
+        )
+        self.assertEqual(
             self.spider.playerContent("baidu#玩偶", "https://pan.baidu.com/s/demo", {}),
             {"parse": 0, "playUrl": "", "url": "https://pan.baidu.com/s/demo"},
+        )
+        self.assertEqual(
+            self.spider.playerContent("a189#玩偶", "https://cloud.189.cn/t/demo", {}),
+            {"parse": 0, "playUrl": "", "url": "https://cloud.189.cn/t/demo"},
+        )
+        self.assertEqual(
+            self.spider.playerContent("a139#玩偶", "https://yun.139.com/share/demo", {}),
+            {"parse": 0, "playUrl": "", "url": "https://yun.139.com/share/demo"},
         )
 
     def test_player_content_rejects_non_pan_url(self):
@@ -460,22 +576,24 @@ class TestWanouAggregateSpider(unittest.TestCase):
 
     @patch.object(Spider, "_fetch_site_search")
     def test_search_content_skips_site_errors(self, mock_fetch_site_search):
-        mock_fetch_site_search.side_effect = [
-            RuntimeError("boom"),
-            [
-                {
-                    "vod_id": "site:muou:/voddetail/2.html",
-                    "vod_name": "繁花",
-                    "vod_pic": "",
-                    "vod_remarks": "",
-                    "vod_year": "2024",
-                    "_site": "muou",
-                    "_detail_path": "/voddetail/2.html",
-                }
-            ],
-            [],
-            [],
-        ]
+        def fake_fetch(site, keyword, page):
+            if site["id"] == "wanou":
+                raise RuntimeError("boom")
+            if site["id"] == "muou":
+                return [
+                    {
+                        "vod_id": "site:muou:/voddetail/2.html",
+                        "vod_name": "繁花",
+                        "vod_pic": "",
+                        "vod_remarks": "",
+                        "vod_year": "2024",
+                        "_site": "muou",
+                        "_detail_path": "/voddetail/2.html",
+                    }
+                ]
+            return []
+
+        mock_fetch_site_search.side_effect = fake_fetch
         result = self.spider.searchContent("繁花", False, "1")
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["list"][0]["vod_name"], "繁花")

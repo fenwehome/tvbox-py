@@ -15,6 +15,7 @@ class Spider(BaseSpider):
     def __init__(self):
         self.name = "玩偶聚合"
         self.filter_root = os.path.join(os.path.dirname(__file__), "../筛选")
+        self.recommend_page_size = 20
         self.headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -48,7 +49,7 @@ class Spider(BaseSpider):
             {
                 "id": "wanou",
                 "name": "玩偶",
-                "domains": ["https://wogg.xxooo.cf"],
+                "domains": ["https://wogg.xxooo.cf", "https://www.wogg.net"],
                 "filter_files": ["wogg.json"],
                 "list_xpath": "//*[contains(@class,'module-item')]",
                 "search_xpath": "//*[contains(@class,'module-search-item')]",
@@ -56,65 +57,140 @@ class Spider(BaseSpider):
                 "category_url": "/vodshow/{categoryId}--------{page}---.html",
                 "category_url_with_filters": "/vodshow/{categoryId}-{area}-{by}-{class}-----{page}---{year}.html",
                 "search_url": "/vodsearch/-------------.html?wd={keyword}&page={page}",
-                "default_categories": [("1", "电影"), ("2", "电视剧"), ("3", "动漫"), ("4", "综艺")],
+                "default_categories": [
+                    ("44", "臻彩"),
+                    ("1", "电影"),
+                    ("2", "电视剧"),
+                    ("3", "动漫"),
+                    ("4", "综艺"),
+                    ("5", "音乐"),
+                    ("6", "短剧"),
+                    ("46", "纪录片"),
+                ],
             },
-            # {
-            #     "id": "muou",
-            #     "name": "木偶",
-            #     "domains": ["https://www.muou.site", "http://123.666291.xyz"],
-            #     "filter_files": ["mogg.json"],
-            #     "list_xpath": "//*[contains(@class,'module-item')]",
-            #     "search_xpath": "//*[contains(@class,'module-search-item')]",
-            #     "detail_pan_xpath": "//*[contains(@class,'module-row-info')]//p",
-            #     "category_url": "/vodshow/{categoryId}--------{page}---.html",
-            #     "search_url": "/vodsearch/-------------.html?wd={keyword}&page={page}",
-            #     "default_categories": [("1", "电影"), ("2", "电视剧"), ("3", "动漫"), ("29", "综艺")],
-            # },
-            # {
-            #     "id": "labi",
-            #     "name": "蜡笔",
-            #     "domains": ["http://xiaocge.fun"],
-            #     "filter_files": ["labi.json"],
-            #     "list_xpath": "//*[contains(@class,'module-item')]",
-            #     "search_xpath": "//*[contains(@class,'module-search-item')]",
-            #     "detail_pan_xpath": "//*[contains(@class,'module-row-info')]//p",
-            #     "category_url": "/vodshow/{categoryId}--------{page}---.html",
-            #     "search_url": "/vodsearch/-------------.html?wd={keyword}&page={page}",
-            #     "default_categories": [("1", "电影"), ("2", "电视剧"), ("3", "动漫"), ("4", "综艺")],
-            # },
             {
-                "id": "zhizhen",
-                "name": "至臻",
-                "domains": ["http://www.miqk.cc"],
-                "filter_files": [],
+                "id": "muou",
+                "name": "木偶",
+                "domains": ["https://www.muou.site", "https://www.muou.asia", "https://666.666291.xyz"],
+                "filter_files": ["mogg.json"],
                 "list_xpath": "//*[contains(@class,'module-item')]",
                 "search_xpath": "//*[contains(@class,'module-search-item')]",
                 "detail_pan_xpath": "//*[contains(@class,'module-row-info')]//p",
-                "category_url": "/index.php/vod/show/id/{categoryId}/page/{page}.html",
-                "search_url": "/index.php/vod/search/page/{page}/wd/{keyword}.html",
                 "default_categories": [
+                    ("25", "臻选"),
                     ("1", "电影"),
-                    ("2", "剧集"),
+                    ("2", "电视剧"),
+                    ("3", "动漫"),
+                    ("4", "纪录片"),
+                    ("29", "综艺"),
+                    ("30", "原盘"),
+                ],
+            },
+            {
+                "id": "labi",
+                "name": "蜡笔",
+                "domains": ["http://xiaocgege.shop", "http://fmao.shop"],
+                "filter_files": ["labi.json"],
+                "list_xpath": "//*[contains(@class,'module-item')]",
+                "search_xpath": "//*[contains(@class,'module-search-item')]",
+                "detail_pan_xpath": "//*[contains(@class,'module-row-info')]//p",
+                "default_categories": [
+                    ("29", "臻彩"),
+                    ("1", "电影"),
+                    ("2", "电视剧"),
+                    ("3", "动漫"),
+                    ("4", "综艺"),
+                    ("5", "短剧"),
+                    ("24", "蜡笔4K"),
+                ],
+            },
+            {
+                "id": "zhizhen",
+                "name": "至臻",
+                "domains": ["http://www.miqk.cc", "https://www.mihdr.top", "https://mihdr.top"],
+                "filter_files": ["zhizhen.json"],
+                "list_xpath": "//*[contains(@class,'module-item')]",
+                "search_xpath": "//*[contains(@class,'module-search-item')]",
+                "detail_pan_xpath": "//*[contains(@class,'module-row-info')]//p",
+                "default_categories": [
+                    ("26", "臻彩"),
+                    ("1", "电影"),
+                    ("2", "电视剧"),
                     ("3", "动漫"),
                     ("4", "综艺"),
                     ("5", "短剧"),
                     ("24", "老剧"),
-                    ("26", "严选"),
                 ],
             },
+            {
+                "id": "erxiao",
+                "name": "二小",
+                "domains": [
+                    "https://www.2xiaopan.top",
+                    "https://www.erxiaozhan.top",
+                    "https://www.wexwp.cc",
+                ],
+                "filter_files": ["erxiao.json"],
+                "list_xpath": "//*[contains(@class,'module-item')]",
+                "search_xpath": "//*[contains(@class,'module-search-item')]",
+                "detail_pan_xpath": "//*[contains(@class,'module-row-info')]//p",
+                "default_categories": [
+                    ("4", "臻彩"),
+                    ("1", "电影"),
+                    ("2", "电视剧"),
+                    ("3", "动漫"),
+                    ("21", "综艺"),
+                ],
+            },
+            # {
+            #     "id": "huban",
+            #     "name": "虎斑",
+            #     "domains": ["http://154.222.27.33:20720", "http://xhban.xyz:20720", "http://103.45.162.207:20720"],
+            #     "filter_files": ["huban.json"],
+            #     "list_xpath": "//*[contains(@class,'module-item')]",
+            #     "search_xpath": "//*[contains(@class,'module-search-item')]",
+            #     "detail_pan_xpath": "//*[contains(@class,'module-row-info')]//p",
+            #     "default_categories": [
+            #         ("6", "臻彩"),
+            #         ("1", "电影"),
+            #         ("2", "电视剧"),
+            #         ("3", "综艺"),
+            #         ("4", "动漫"),
+            #         ("5", "短剧"),
+            #         ("30", "115网盘"),
+            #     ],
+            # },
+            # {
+            #     "id": "kuaiying",
+            #     "name": "快映",
+            #     "domains": ["http://154.201.83.50:12512", "http://xsayang.fun:12512"],
+            #     "filter_files": ["xiaoban.json"],
+            #     "list_xpath": "//*[contains(@class,'module-item')]",
+            #     "search_xpath": "//*[contains(@class,'module-search-item')]",
+            #     "detail_pan_xpath": "//*[contains(@class,'module-row-info')]//p",
+            #     "default_categories": [
+            #         ("5", "臻彩"),
+            #         ("1", "电影"),
+            #         ("2", "电视剧"),
+            #         ("3", "综艺"),
+            #         ("4", "动漫"),
+            #         ("6", "短剧"),
+            #         ("30", "115"),
+            #         ("35", "123"),
+            #         ("36", "天移迅"),
+            #     ],
+            # },
             {
                 "id": "shandian",
                 "name": "闪电",
                 "domains": ["https://sd.sduc.site"],
-                "filter_files": [],
+                "filter_files": ["shandian.json"],
                 "list_xpath": "//*[contains(@class,'module-item')]",
                 "search_xpath": "//*[contains(@class,'module-search-item')]",
                 "detail_pan_xpath": "//*[contains(@class,'module-row-info')]//p",
-                "category_url": "/index.php/vod/show/id/{categoryId}/page/{page}.html",
-                "search_url": "/index.php/vod/search/page/{page}/wd/{keyword}.html",
                 "default_categories": [
                     ("1", "电影"),
-                    ("2", "剧集"),
+                    ("2", "电视剧"),
                     ("3", "综艺"),
                     ("4", "动漫"),
                     ("30", "短剧"),
@@ -122,17 +198,15 @@ class Spider(BaseSpider):
             },
             {
                 "id": "ouge",
-                "name": "欧歌",
+                "name": "欧哥",
                 "domains": ["https://woog.nxog.eu.org"],
-                "filter_files": [],
+                "filter_files": ["ouge.json"],
                 "list_xpath": "//*[contains(@class,'module-item')]",
                 "search_xpath": "//*[contains(@class,'module-search-item')]",
                 "detail_pan_xpath": "//*[contains(@class,'module-row-info')]//p",
-                "category_url": "/index.php/vod/show/id/{categoryId}/page/{page}.html",
-                "search_url": "/index.php/vod/search/page/{page}/wd/{keyword}.html",
                 "default_categories": [
                     ("1", "电影"),
-                    ("2", "剧集"),
+                    ("2", "电视剧"),
                     ("3", "动漫"),
                     ("4", "综艺"),
                     ("5", "短剧"),
@@ -151,7 +225,47 @@ class Spider(BaseSpider):
         return {"list": []}
 
     def _load_local_filter_groups(self, site):
-        return []
+        groups = []
+        for filename in site.get("filter_files", []):
+            if not filename:
+                continue
+            file_path = os.path.join(self.filter_root, filename)
+            if not os.path.exists(file_path):
+                continue
+            try:
+                with open(file_path, "r", encoding="utf-8") as handle:
+                    raw = json.load(handle)
+            except Exception:
+                continue
+            merged = {}
+            for category_groups in raw.values() if isinstance(raw, dict) else []:
+                if not isinstance(category_groups, list):
+                    continue
+                for group in category_groups:
+                    key = str(group.get("key") or "").strip()
+                    if not key or key == "categoryId":
+                        continue
+                    bucket = merged.setdefault(
+                        key,
+                        {
+                            "key": key,
+                            "name": str(group.get("name") or key),
+                            "init": str(group.get("init") or ""),
+                            "value": [],
+                        },
+                    )
+                    for item in group.get("value", []):
+                        value = str(item.get("v") if isinstance(item, dict) else "")
+                        name = str(item.get("n") if isinstance(item, dict) else "")
+                        if not name:
+                            continue
+                        if not any(existing.get("v") == value for existing in bucket["value"]):
+                            bucket["value"].append({"n": name, "v": value})
+            for group in merged.values():
+                if not any(item.get("v") == "" for item in group["value"]):
+                    group["value"].insert(0, {"n": "全部", "v": ""})
+                groups.append(group)
+        return groups
 
     def _build_site_filters(self, site):
         groups = [
@@ -167,8 +281,20 @@ class Spider(BaseSpider):
         return groups
 
     def homeContent(self, filter):
-        classes = [{"type_id": f"site_{site['id']}", "type_name": site["name"]} for site in self.sites]
-        filters = {f"site_{site['id']}": self._build_site_filters(site) for site in self.sites}
+        classes = [{"type_id": "site_recommend", "type_name": "推荐"}]
+        classes.extend({"type_id": f"site_{site['id']}", "type_name": site["name"]} for site in self.sites)
+        filters = {
+            "site_recommend": [
+                {
+                    "key": "recommendSite",
+                    "name": "站点",
+                    "init": "all",
+                    "value": [{"n": "全部", "v": "all"}]
+                    + [{"n": site["name"], "v": site["id"]} for site in self.sites],
+                }
+            ]
+        }
+        filters.update({f"site_{site['id']}": self._build_site_filters(site) for site in self.sites})
         return {"class": classes, "filters": filters}
 
     def _encode_site_vod_id(self, site_id, path):
@@ -218,6 +344,13 @@ class Spider(BaseSpider):
             return "https:" + raw
         return str(base).rstrip("/") + "/" + raw.lstrip("/")
 
+    def _class_xpath(self, class_name):
+        return f"contains(concat(' ', normalize-space(@class), ' '), ' {class_name} ')"
+
+    def _has_class(self, node, class_name):
+        classes = f" {str(node.get('class') or '').strip()} "
+        return f" {class_name} " in classes
+
     def _build_category_url(self, site, category_id, pg, extend):
         values = dict(extend or {})
         values.setdefault("categoryId", category_id)
@@ -237,7 +370,8 @@ class Spider(BaseSpider):
                 }
             )
         else:
-            path = site["category_url"].format(categoryId=values["categoryId"], page=int(pg))
+            template = site.get("category_url") or "/index.php/vod/show/id/{categoryId}/page/{page}.html"
+            path = template.format(categoryId=values["categoryId"], page=int(pg))
         return self._build_absolute_url(site["domains"][0], path)
 
     def _request_with_failover(self, site, path_or_url, referer=None):
@@ -263,17 +397,21 @@ class Spider(BaseSpider):
 
         items = []
         seen = set()
+        pic_box_xpath = self._class_xpath("module-item-pic")
+        text_xpath = self._class_xpath("module-item-text")
         for card in root.xpath(site["list_xpath"]):
+            if not self._has_class(card, "module-item"):
+                continue
             href = ((card.xpath(".//a[@href][1]/@href") or [""])[0]).strip()
             title = (
                 ((card.xpath(".//img[@alt][1]/@alt") or [""])[0]).strip()
                 or ((card.xpath(".//a[@title][1]/@title") or [""])[0]).strip()
             )
             pic = (
-                ((card.xpath(".//img[@data-src][1]/@data-src") or [""])[0]).strip()
-                or ((card.xpath(".//img[@src][1]/@src") or [""])[0]).strip()
+                ((card.xpath(f".//*[{pic_box_xpath}]//img[1]/@data-src") or [""])[0]).strip()
+                or ((card.xpath(f".//*[{pic_box_xpath}]//img[1]/@src") or [""])[0]).strip()
             )
-            remarks = "".join(card.xpath(".//*[contains(@class,'module-item-text')][1]//text()")).strip()
+            remarks = "".join(card.xpath(f".//*[{text_xpath}][1]//text()")).strip()
             if not href or not title or href in seen:
                 continue
             seen.add(href)
@@ -292,8 +430,31 @@ class Spider(BaseSpider):
 
     def categoryContent(self, tid, pg, filter, extend):
         site_id = str(tid).replace("site_", "", 1)
-        site = self._get_site(site_id)
         values = extend if isinstance(extend, dict) else {}
+        if site_id == "recommend":
+            recommend_site_id = str(values.get("recommendSite") or "all")
+            candidates = self.sites if recommend_site_id == "all" else [site for site in self.sites if site["id"] == recommend_site_id]
+            merged = []
+            for site in candidates:
+                for item in self._fetch_site_home_recommend(site):
+                    matched = None
+                    for existing in merged:
+                        if self._is_same_title(existing, item):
+                            matched = existing
+                            break
+                    if matched is None:
+                        source_name = site["name"]
+                        remarks = str(item.get("vod_remarks") or "").strip()
+                        tagged = dict(item)
+                        tagged["vod_remarks"] = f"[{source_name}] {remarks}".strip()
+                        merged.append(tagged)
+            page = int(pg)
+            start = max(page - 1, 0) * self.recommend_page_size
+            end = start + self.recommend_page_size
+            paged = merged[start:end]
+            return {"list": paged, "page": page, "limit": len(paged), "total": len(merged)}
+
+        site = self._get_site(site_id)
         category_id = values.get("categoryId") or site["default_categories"][0][0]
         html = self._request_with_failover(site, self._build_category_url(site, category_id, pg, values))
         items = self._parse_cards(site, html)
@@ -313,13 +474,17 @@ class Spider(BaseSpider):
         items = []
         seen = set()
         xpath = site.get("search_xpath") or site["list_xpath"]
+        video_serial_xpath = self._class_xpath("video-serial")
+        text_xpath = self._class_xpath("module-item-text")
         for card in root.xpath(xpath):
+            if "module-search-item" in xpath and not self._has_class(card, "module-search-item"):
+                continue
             href = (
-                ((card.xpath(".//*[contains(@class,'video-serial')][1]/@href") or [""])[0]).strip()
+                ((card.xpath(f".//*[{video_serial_xpath}][1]/@href") or [""])[0]).strip()
                 or ((card.xpath(".//*[@href][1]/@href") or [""])[0]).strip()
             )
             title = (
-                ((card.xpath(".//*[contains(@class,'video-serial')][1]/@title") or [""])[0]).strip()
+                ((card.xpath(f".//*[{video_serial_xpath}][1]/@title") or [""])[0]).strip()
                 or ((card.xpath(".//img[@alt][1]/@alt") or [""])[0]).strip()
                 or ((card.xpath(".//*[@title][1]/@title") or [""])[0]).strip()
             )
@@ -327,7 +492,7 @@ class Spider(BaseSpider):
                 ((card.xpath(".//img[@data-src][1]/@data-src") or [""])[0]).strip()
                 or ((card.xpath(".//img[@src][1]/@src") or [""])[0]).strip()
             )
-            remarks = "".join(card.xpath(".//*[contains(@class,'module-item-text')][1]//text()")).strip()
+            remarks = "".join(card.xpath(f".//*[{text_xpath}][1]//text()")).strip()
             if not href or not title or href in seen:
                 continue
             seen.add(href)
@@ -345,9 +510,15 @@ class Spider(BaseSpider):
         return items
 
     def _fetch_site_search(self, site, keyword, pg):
-        search_path = site["search_url"].format(keyword=quote(str(keyword)), page=int(pg))
+        template = site.get("search_url") or "/index.php/vod/search/page/{page}/wd/{keyword}.html"
+        search_path = template.format(keyword=quote(str(keyword)), page=int(pg))
         html = self._request_with_failover(site, search_path)
         return self._parse_search_cards(site, html)
+
+    def _fetch_site_home_recommend(self, site, limit=30):
+        html = self._request_with_failover(site, "/")
+        items = self._parse_cards(site, html)
+        return items[:limit]
 
     def _aggregate_search_results(self, items):
         groups = []
@@ -406,21 +577,21 @@ class Spider(BaseSpider):
         value = str(url or "").lower()
         if "pan.baidu.com" in value:
             return "baidu", "百度资源"
-        if "pan.quark.cn" in value:
+        if "quark.cn" in value:
             return "quark", "夸克资源"
-        if "drive.uc.cn" in value:
+        if "uc.cn" in value:
             return "uc", "UC资源"
         if "alipan.com" in value or "aliyundrive.com" in value:
             return "aliyun", "阿里资源"
-        if "pan.xunlei.com" in value:
+        if "xunlei.com" in value:
             return "xunlei", "迅雷资源"
         if "123pan.com" in value:
             return "a123", "123资源"
-        if "115.com" in value:
+        if "115.com" in value or "115cdn.com" in value:
             return "a115", "115资源"
-        if "189.cn" in value:
+        if "cloud.189.cn" in value or "189.cn" in value:
             return "a189", "天翼资源"
-        if "139.com" in value:
+        if "yun.139.com" in value or "139.com" in value:
             return "a139", "移动云资源"
         return "", ""
 
