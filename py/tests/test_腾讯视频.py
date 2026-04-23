@@ -156,6 +156,59 @@ class TestTencentSpider(unittest.TestCase):
             "第1集$https://v.qq.com/x/cover/cid001/vid001.html#终极预告$https://v.qq.com/x/cover/cid001/vid002.html",
         )
 
+    @patch.object(Spider, "post")
+    def test_search_content_collects_normal_and_area_results(self, mock_post):
+        mock_post.return_value = SimpleNamespace(
+            json=lambda: {
+                "data": {
+                    "normalList": {
+                        "itemList": [
+                            {
+                                "doc": {"id": "mzc001234567890"},
+                                "videoInfo": {
+                                    "title": "<em>庆余年</em>",
+                                    "imgUrl": "https://img.test/1.jpg",
+                                    "firstLine": "热播",
+                                },
+                            }
+                        ]
+                    },
+                    "areaBoxList": [
+                        {
+                            "itemList": [
+                                {
+                                    "doc": {"id": "mzc009876543210"},
+                                    "videoInfo": {
+                                        "title": "雪中悍刀行",
+                                        "imgUrl": "https://img.test/2.jpg",
+                                        "secondLine": "完结",
+                                    },
+                                }
+                            ]
+                        }
+                    ],
+                }
+            }
+        )
+
+        result = self.spider.searchContent("庆余年", False, "2")
+
+        self.assertEqual(result["page"], 2)
+        self.assertEqual(result["limit"], 30)
+        self.assertEqual(result["list"][0]["vod_name"], "庆余年")
+        self.assertEqual(result["list"][1]["vod_remarks"], "完结")
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(payload["query"], "庆余年")
+        self.assertEqual(payload["pagenum"], 1)
+
+    @patch.object(Spider, "post")
+    def test_search_content_returns_empty_page_on_error(self, mock_post):
+        mock_post.side_effect = RuntimeError("network error")
+        self.assertEqual(
+            self.spider.searchContent("失败", False, "1"),
+            {"list": [], "page": 1, "pagecount": 1, "limit": 30, "total": 0},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -184,3 +184,67 @@ class Spider(BaseSpider):
                 vod["vod_play_url"] = "#".join(play_items)
             result["list"].append(vod)
         return result
+
+    def searchContent(self, key, quick, pg="1"):
+        url = (
+            "https://pbaccess.video.qq.com/trpc.videosearch.mobile_search."
+            "MultiTerminalSearch/MbSearch?vplatform=2"
+        )
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/98.0.4758.139 Safari/537.36"
+            ),
+            "Content-Type": "application/json",
+            "Origin": "https://v.qq.com",
+            "Referer": "https://v.qq.com/",
+        }
+        payload = {
+            "version": "25042201",
+            "clientType": 1,
+            "query": key,
+            "pagenum": int(pg) - 1,
+            "pagesize": 30,
+            "extraInfo": {
+                "isNewMarkLabel": "1",
+                "multi_terminal_pc": "1",
+                "themeType": "1",
+            },
+        }
+        try:
+            response = self.post(url, headers=headers, json=payload)
+            data = response.json()
+        except Exception:
+            return {"list": [], "page": 1, "pagecount": 1, "limit": 30, "total": 0}
+
+        videos = []
+
+        def process_item(item):
+            if not item or not item.get("doc") or not item["doc"].get("id") or not item.get("videoInfo"):
+                return
+            if len(item["doc"]["id"]) <= 11:
+                return
+            info = item["videoInfo"]
+            videos.append(
+                {
+                    "vod_id": item["doc"]["id"],
+                    "vod_name": re.sub(r"</?em>", "", info.get("title", "")),
+                    "vod_pic": info.get("imgUrl", ""),
+                    "vod_remarks": info.get("firstLine") or info.get("secondLine") or "",
+                }
+            )
+
+        for item in (((data.get("data") or {}).get("normalList") or {}).get("itemList") or []):
+            process_item(item)
+        for area in ((data.get("data") or {}).get("areaBoxList") or []):
+            for item in (area.get("itemList") or []):
+                process_item(item)
+
+        page = int(pg)
+        return {
+            "list": videos,
+            "page": page,
+            "pagecount": page + 1 if len(videos) >= 20 else page,
+            "limit": 30,
+            "total": 999 if videos else 0,
+        }
