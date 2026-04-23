@@ -21,6 +21,13 @@ HOME_HTML = """
 </div>
 """
 
+CATEGORY_HTML = """
+<div class="list_item">
+  <a data-float="/x/cover/cid001/vid001.html"><img alt="三体" src="https://img.test/c.jpg"></a>
+  <a>更新至30集</a>
+</div>
+"""
+
 
 class TestTencentSpider(unittest.TestCase):
     def setUp(self):
@@ -70,6 +77,48 @@ class TestTencentSpider(unittest.TestCase):
                 "header": {"User-Agent": "PC_UA"},
             },
         )
+
+    @patch.object(Spider, "fetch")
+    def test_category_content_maps_filters_and_prefixes_channel(self, mock_fetch):
+        mock_fetch.return_value = SimpleNamespace(text=CATEGORY_HTML)
+        result = self.spider.categoryContent(
+            "tv",
+            "2",
+            False,
+            {
+                "sort": "18",
+                "iyear": "2024",
+                "year": "2024",
+                "type": "17",
+                "feature": "4",
+                "area": "2",
+                "itrailer": "1",
+                "sex": "1",
+            },
+        )
+        request_url = mock_fetch.call_args.args[0]
+        self.assertIn("channel=tv", request_url)
+        self.assertIn("offset=21", request_url)
+        self.assertIn("sort=18", request_url)
+        self.assertIn("iyear=2024", request_url)
+        self.assertIn("year=2024", request_url)
+        self.assertIn("itype=17", request_url)
+        self.assertIn("ifeature=4", request_url)
+        self.assertIn("iarea=2", request_url)
+        self.assertIn("itrailer=1", request_url)
+        self.assertIn("gender=1", request_url)
+        self.assertEqual(result["list"][0]["vod_id"], "tv$/x/cover/cid001/vid001.html")
+        self.assertEqual(result["page"], 2)
+        self.assertEqual(result["limit"], 21)
+        self.assertEqual(result["pagecount"], 9999)
+
+    @patch.object(Spider, "fetch")
+    def test_get_batch_video_info_parses_qzoutputjson_payload(self, mock_fetch):
+        mock_fetch.return_value = SimpleNamespace(
+            text='QZOutputJson={"results":[{"fields":{"vid":"vid001","title":"第1集","category_map":["0","正片"]}}]};'
+        )
+        result = self.spider._get_batch_video_info(["vid001"])
+        self.assertEqual(result, [{"vid": "vid001", "title": "第1集", "type": "正片"}])
 
 
 if __name__ == "__main__":

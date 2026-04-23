@@ -1,4 +1,5 @@
 # coding=utf-8
+import json
 import re
 import sys
 
@@ -74,3 +75,74 @@ class Spider(BaseSpider):
 
     def playerContent(self, flag, id, vipFlags):
         return {"parse": 1, "jx": 1, "url": id, "header": self._headers()}
+
+    def _safe_json(self, text, strip_prefix="", strip_suffix=""):
+        raw = str(text or "")
+        if strip_prefix and raw.startswith(strip_prefix):
+            raw = raw[len(strip_prefix):]
+        if strip_suffix and raw.endswith(strip_suffix):
+            raw = raw[: -len(strip_suffix)]
+        return json.loads(raw) if raw else {}
+
+    def _get_batch_video_info(self, vids):
+        results = []
+        for start in range(0, len(vids or []), 30):
+            batch = vids[start:start + 30]
+            if not batch:
+                continue
+            url = (
+                "https://union.video.qq.com/fcgi-bin/data?otype=json&tid=1804&appid=20001238"
+                "&appkey=6c03bbe9658448a4&union_platform=1&idlist=" + ",".join(batch)
+            )
+            response = self.fetch(url, headers=self._headers())
+            payload = self._safe_json(getattr(response, "text", ""), strip_prefix="QZOutputJson=", strip_suffix=";")
+            for item in payload.get("results", []):
+                fields = item.get("fields", {})
+                category_map = fields.get("category_map", [])
+                results.append(
+                    {
+                        "vid": fields.get("vid", ""),
+                        "title": fields.get("title", ""),
+                        "type": category_map[1] if len(category_map) > 1 else "",
+                    }
+                )
+        return results
+
+    def categoryContent(self, tid, pg, filter, extend):
+        page = int(pg)
+        offset = (page - 1) * 21
+        params = [
+            "_all=1",
+            "append=1",
+            f"channel={tid}",
+            "listpage=1",
+            f"offset={offset}",
+            "pagesize=21",
+            "iarea=-1",
+        ]
+        options = dict(extend or {})
+        if options.get("sort"):
+            params.append(f"sort={options['sort']}")
+        if options.get("iyear"):
+            params.append(f"iyear={options['iyear']}")
+        if options.get("year"):
+            params.append(f"year={options['year']}")
+        if options.get("type"):
+            params.append(f"itype={options['type']}")
+        if options.get("feature"):
+            params.append(f"ifeature={options['feature']}")
+        if options.get("area"):
+            params.append(f"iarea={options['area']}")
+        if options.get("itrailer"):
+            params.append(f"itrailer={options['itrailer']}")
+        if options.get("sex"):
+            params.append(f"gender={options['sex']}")
+        url = f"{self.base_host}/x/bu/pagesheet/list?" + "&".join(params)
+        response = self.fetch(url, headers=self._headers())
+        return {
+            "list": self._parse_list_items(getattr(response, "text", ""), with_channel=True, channel_id=str(tid)),
+            "page": page,
+            "pagecount": 9999,
+            "limit": 21,
+            "total": 999999,
+        }
