@@ -209,3 +209,47 @@ class Spider(BaseSpider):
             return self._page_result(data.get("data") or [], pg, 10)
         except Exception:
             return self._page_result([], pg, 10)
+
+    def detailContent(self, ids):
+        vod_id = ids[0] if isinstance(ids, (list, tuple)) else ids
+        try:
+            data = self._fetch_api("/sk-api/vod/one", {"vodId": vod_id})
+        except Exception:
+            return {"list": []}
+        vod = data.get("data")
+        return {"list": [vod]} if isinstance(vod, dict) else {"list": []}
+
+    def _player_headers(self):
+        return {
+            "User-Agent": (
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) "
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 "
+                "Mobile/15E148 Safari/604.1"
+            )
+        }
+
+    def playerContent(self, flag, id, vipFlags):
+        try:
+            data = self._fetch_api("/sk-api/vod/skjson", {"url": id, "skjsonindex": 0})
+            play_url = str((data.get("data") or {}).get("url") or "")
+            if play_url.startswith("http"):
+                return {
+                    "parse": 0,
+                    "jx": 0,
+                    "url": play_url,
+                    "header": self._player_headers(),
+                }
+        except Exception:
+            pass
+
+        target = str(id or "")
+        jx = 1 if any(
+            domain in target.lower()
+            for domain in ["iqiyi.com", "qq.com", "youku.com", "mgtv.com", "bilibili.com"]
+        ) else 0
+        return {
+            "parse": 0,
+            "jx": jx,
+            "url": target,
+            "header": self._player_headers(),
+        }

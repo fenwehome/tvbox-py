@@ -165,6 +165,44 @@ class TestJiKanYingShiSpider(unittest.TestCase):
         self.assertEqual(result["list"], [])
         self.assertEqual(result["total"], 0)
 
+    @patch.object(Spider, "_fetch_api")
+    def test_detail_content_wraps_single_vod_in_list(self, mock_fetch_api):
+        mock_fetch_api.return_value = {"data": {"vod_id": "d1", "vod_name": "详情片"}}
+
+        result = self.spider.detailContent(["d1"])
+
+        self.assertEqual(mock_fetch_api.call_args.args, ("/sk-api/vod/one", {"vodId": "d1"}))
+        self.assertEqual(result, {"list": [{"vod_id": "d1", "vod_name": "详情片"}]})
+
+    @patch.object(Spider, "_fetch_api")
+    def test_player_content_prefers_skjson_url(self, mock_fetch_api):
+        mock_fetch_api.return_value = {"data": {"url": "https://media.example/final.m3u8"}}
+
+        result = self.spider.playerContent("", "https://wrapped.example/play", "")
+
+        self.assertEqual(
+            mock_fetch_api.call_args.args,
+            ("/sk-api/vod/skjson", {"url": "https://wrapped.example/play", "skjsonindex": 0}),
+        )
+        self.assertEqual(result["url"], "https://media.example/final.m3u8")
+        self.assertEqual(result["jx"], 0)
+
+    @patch.object(Spider, "_fetch_api")
+    def test_player_content_falls_back_to_original_id_and_sets_jx_for_video_sites(self, mock_fetch_api):
+        mock_fetch_api.side_effect = RuntimeError("parse failed")
+
+        result = self.spider.playerContent("", "https://v.qq.com/x/cover/abcd", "")
+
+        self.assertEqual(result["url"], "https://v.qq.com/x/cover/abcd")
+        self.assertEqual(result["jx"], 1)
+        self.assertEqual(result["parse"], 0)
+
+    @patch.object(Spider, "_fetch_api")
+    def test_detail_content_returns_empty_list_when_api_has_no_data(self, mock_fetch_api):
+        mock_fetch_api.return_value = {"data": None}
+
+        self.assertEqual(self.spider.detailContent(["404"]), {"list": []})
+
 
 if __name__ == "__main__":
     unittest.main()
