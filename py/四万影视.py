@@ -151,6 +151,60 @@ class Spider(BaseSpider):
     def homeVideoContent(self):
         return {"list": []}
 
+    def _type_name_by_id(self, type_id):
+        raw = str(type_id or "")
+        parent = self.subtype_parent_map.get(raw, raw)
+        return self.type_name_map.get(parent, "")
+
+    def _normalize_actor(self, value):
+        return str(value or "").replace("&amp;#039;", "'").replace(" , ", ", ")
+
+    def _normalize_vod(self, item):
+        return {
+            "vod_id": str(item.get("vod_id", "")),
+            "vod_name": str(item.get("vod_name", "")),
+            "vod_pic": str(item.get("vod_pic") or self.fallback_pic),
+            "vod_remarks": str(item.get("vod_remarks", "")),
+            "vod_year": str(item.get("vod_year", "")),
+            "type_name": str(item.get("type_name") or self._type_name_by_id(item.get("type_id"))),
+            "vod_actor": self._normalize_actor(item.get("vod_actor", "")),
+        }
+
+    def _page_result(self, items, page, total=0):
+        return {
+            "page": int(page),
+            "limit": len(items),
+            "total": int(total) if total else len(items),
+            "list": items,
+        }
+
+    def _parse_play_groups(self, item):
+        from_list = str(item.get("vod_play_from", "")).split("$$$")
+        url_list = str(item.get("vod_play_url", "")).split("$$$")
+        final_from = []
+        final_url = []
+        for index, raw_urls in enumerate(url_list):
+            raw_urls = str(raw_urls or "").strip()
+            if not raw_urls:
+                continue
+            line_name = str(from_list[index] if index < len(from_list) else "").strip() or f"线路{index + 1}"
+            episodes = []
+            for episode_index, part in enumerate(raw_urls.split("#")):
+                chunks = str(part or "").split("$", 1)
+                if len(chunks) > 1:
+                    title = chunks[0].strip()
+                    play_id = chunks[1].strip()
+                else:
+                    title = ""
+                    play_id = chunks[0].strip() if chunks else ""
+                title = title or f"第{episode_index + 1}集"
+                if play_id:
+                    episodes.append(f"{title}${play_id}")
+            if episodes:
+                final_from.append(line_name)
+                final_url.append("#".join(episodes))
+        return {"vod_play_from": "$$$".join(final_from), "vod_play_url": "$$$".join(final_url)}
+
     def _api_get(self, params):
         response = self.fetch(
             self.api,
@@ -164,3 +218,66 @@ class Spider(BaseSpider):
         if not isinstance(data, dict):
             raise ValueError("api response is not object")
         return data
+
+    def categoryContent(self, tid, pg, filter, extend):
+        page = max(int(pg), 1)
+        values = dict(extend or {})
+        params = {
+            "ac": "detail",
+            "t": str(values.get("subType") or tid),
+            "pg": page,
+            "by": str(values.get("sort") or "time"),
+        }
+        year = str(values.get("year") or "").strip()
+        if year:
+            params["h"] = year
+        try:
+            data = self._api_get(params)
+        except ValueError:
+            return {"page": page, "limit": 0, "total": 0, "list": []}
+        items = [self._normalize_vod(item) for item in data.get("list", [])]
+        return self._page_result(items, data.get("page", page), data.get("total", 0))
+
+    def searchContent(self, key, quick, pg="1"):
+        page = max(int(pg), 1)
+        keyword = str(key or "").strip()
+        if not keyword:
+            return {"page": page, "limit": 0, "total": 0, "list": []}
+        try:
+            data = self._api_get({"ac": "detail", "wd": keyword, "pg": page})
+        except ValueError:
+            return {"page": page, "limit": 0, "total": 0, "list": []}
+        items = [self._normalize_vod(item) for item in data.get("list", [])]
+        return self._page_result(items, data.get("page", page), data.get("total", 0))
+
+    def detailContent(self, ids):
+        vod_id = str(ids[0] if isinstance(ids, list) and ids else ids or "").strip()
+        if not vod_id:
+            return {"list": []}
+        try:
+            data = self._api_get({"ac": "detail", "ids": vod_id})
+        except ValueError:
+            return {"list": []}
+        item = (data.get("list") or [None])[0]
+        if not item:
+            return {"list": []}
+        normalized = self._normalize_vod(item)
+        play_data = self._parse_play_groups(item)
+        return {
+            "list": [
+                {
+                    "vod_id": normalized["vod_id"],
+                    "vod_name": normalized["vod_name"],
+                    "vod_pic": normalized["vod_pic"],
+                    "type_name": normalized["type_name"],
+                    "vod_year": str(item.get("vod_year", "")),
+                    "vod_area": str(item.get("vod_area", "")),
+                    "vod_director": str(item.get("vod_director", "")),
+                    "vod_actor": normalized["vod_actor"],
+                    "vod_content": str(item.get("vod_blurb") or item.get("vod_content") or ""),
+                    "vod_remarks": str(item.get("vod_remarks", "")),
+                    "vod_play_from": play_data["vod_play_from"],
+                    "vod_play_url": play_data["vod_play_url"],
+                }
+            ]
+        }
