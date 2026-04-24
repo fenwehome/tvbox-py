@@ -213,6 +213,24 @@ class TestSJMusicSpider(unittest.TestCase):
         self.assertEqual(playlist_vod["vod_play_url"], "安静$music:401#晴天$music:402")
         self.assertEqual(singer_vod["vod_play_url"], "青花瓷$music:501#稻香$music:502")
 
+    def test_player_content_maps_music_and_mv_ids(self):
+        song = self.spider.playerContent("世纪音乐", "music:123", {})
+        mv = self.spider.playerContent("世纪音乐", "vplay:456:1080", {})
+        self.assertEqual(song["parse"], 0)
+        self.assertEqual(song["url"], "https://www.4c44.com/data/down.php?ac=music&id=123")
+        self.assertEqual(mv["url"], "https://www.4c44.com/data/down.php?ac=vplay&id=456&q=1080")
+
+    def test_player_content_returns_empty_url_for_invalid_id(self):
+        self.assertEqual(self.spider.playerContent("世纪音乐", "bad", {})["url"], "")
+
+    @patch.object(Spider, "fetch")
+    def test_filters_include_singer_mv_and_playlist_groups(self, mock_fetch):
+        mock_fetch.return_value = SimpleNamespace(status_code=200, text=HOME_HTML)
+        filters = self.spider.homeContent(False)["filters"]
+        self.assertEqual([item["key"] for item in filters["singer"]], ["sex", "area", "char"])
+        self.assertEqual([item["key"] for item in filters["mv"]], ["area", "type", "sort"])
+        self.assertEqual([item["key"] for item in filters["playlist"]], ["lang", "style"])
+
 
 if __name__ == "__main__":
     unittest.main()

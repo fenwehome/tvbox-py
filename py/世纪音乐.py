@@ -72,7 +72,70 @@ class Spider(BaseSpider):
         return text.split(marker, 1)[1].split(".html", 1)[0].split("/", 1)[0]
 
     def _build_filters(self):
-        return {"singer": [], "mv": [], "playlist": []}
+        return {
+            "singer": [
+                {
+                    "key": "sex",
+                    "name": "性别",
+                    "value": [
+                        {"n": "女歌手", "v": "girl"},
+                        {"n": "男歌手", "v": "male"},
+                        {"n": "乐队组合", "v": "band"},
+                    ],
+                },
+                {
+                    "key": "area",
+                    "name": "地区",
+                    "value": [
+                        {"n": "华语", "v": "huayu"},
+                        {"n": "欧美", "v": "oumei"},
+                        {"n": "韩国", "v": "hanguo"},
+                        {"n": "日本", "v": "riben"},
+                    ],
+                },
+                {
+                    "key": "char",
+                    "name": "字母",
+                    "value": [{"n": "全部", "v": "index"}],
+                },
+            ],
+            "mv": [
+                {
+                    "key": "area",
+                    "name": "地区",
+                    "value": [{"n": "全部地区", "v": "index"}],
+                },
+                {
+                    "key": "type",
+                    "name": "类型",
+                    "value": [{"n": "全部类型", "v": "index"}],
+                },
+                {
+                    "key": "sort",
+                    "name": "排序",
+                    "value": [
+                        {"n": "最新", "v": "new"},
+                        {"n": "最热", "v": "hot"},
+                        {"n": "上升最快", "v": "rise"},
+                    ],
+                },
+            ],
+            "playlist": [
+                {
+                    "key": "lang",
+                    "name": "语种",
+                    "value": [{"n": "全部语种", "v": "index"}],
+                },
+                {
+                    "key": "style",
+                    "name": "风格",
+                    "value": [
+                        {"n": "流行", "v": "liuxing"},
+                        {"n": "摇滚", "v": "yaogun"},
+                    ],
+                },
+            ],
+        }
 
     def _parse_home_items(self, html):
         root = self._load_html(html)
@@ -124,6 +187,15 @@ class Spider(BaseSpider):
         if kind == "vplay":
             return f"vplay:{value}:1080"
         return ""
+
+    def _decode_play_id(self, play_id):
+        raw = str(play_id or "").strip()
+        if raw.startswith("music:"):
+            return "music", raw.split(":", 1)[1], "0"
+        if raw.startswith("vplay:"):
+            _, mv_id, quality = raw.split(":", 2)
+            return "vplay", mv_id, quality
+        return "", "", ""
 
     def _parse_list_cards(self, html, expected_prefixes):
         root = self._load_html(html)
@@ -285,3 +357,20 @@ class Spider(BaseSpider):
                 ]
             }
         return {"list": []}
+
+    def playerContent(self, flag, id, vipFlags):
+        kind, value, quality = self._decode_play_id(id)
+        if kind == "music":
+            url = f"{self.host}/data/down.php?ac=music&id={value}"
+        elif kind == "vplay":
+            url = f"{self.host}/data/down.php?ac=vplay&id={value}&q={quality}"
+        else:
+            url = ""
+        return {
+            "parse": 0,
+            "url": url,
+            "header": {
+                "User-Agent": self.headers["User-Agent"],
+                "Referer": self.host + "/",
+            },
+        }
