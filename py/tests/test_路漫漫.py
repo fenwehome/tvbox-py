@@ -189,6 +189,41 @@ class TestLuManManSpider(unittest.TestCase):
         )
         self.assertEqual(result, "")
 
+    @patch.object(Spider, "_post_json")
+    @patch.object(Spider, "_get_html")
+    def test_resolve_player_url_supports_tudou_yunbox_flow(self, mock_html, mock_post_json):
+        player = {"url": "DU_token_value&t=DU", "encrypt": "0", "from": "tudou"}
+        mock_html.side_effect = [
+            """
+            MacPlayer.Html = '<iframe id="playerCnt" width="100%" frameborder="0" allowfullscreen src="" ></iframe>';
+            document.getElementById('playerCnt').src = 'https://yun.92cj.com/acfun58.php?id=' + MacPlayer.Parse + MacPlayer.PlayUrl + '&referer='+ window.location.href;
+            """,
+            """
+            <script>
+            var vid = "DU_token_value";
+            var t = "1777023867";
+            var token = "od4gtx7Jiv1lFUXEm2N2JfveIFB/NwbUd/fdO3/XqbLN6kDh1wBhXVZk+Kruh4qB";
+            var act = "0";
+            var play = "1";
+            $.post("ducloud.php",{"vid":vid,"t":t,"token":getc(token),"act":act,"play":play},function(data){}, "json");
+            </script>
+            """,
+        ]
+        mock_post_json.return_value = {"url": "https://video.example.com/final.m3u8"}
+        result = self.spider._resolve_player_url(player, "https://www.lmm85.com/play/7541_2_1.html")
+        self.assertEqual(result, "https://video.example.com/final.m3u8")
+        mock_post_json.assert_called_once_with(
+            "https://yun.92cj.com/yunbox/ducloud.php",
+            {
+                "vid": "DU_token_value",
+                "t": "1777023867",
+                "token": "659d24991db8fb7e2750e30f7afb3107",
+                "act": "0",
+                "play": "1",
+            },
+            referer="https://yun.92cj.com/yunbox/?type=DU&vid=DU_token_value&referer=https://www.lmm85.com/play/7541_2_1.html",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

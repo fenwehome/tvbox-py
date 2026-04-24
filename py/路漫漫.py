@@ -251,8 +251,25 @@ class Spider(BaseSpider):
         raw = re.sub(r"[\+\s']", "", matched.group(1))
         raw = raw.replace("MacPlayer.PlayUrl", video_url)
         raw = raw.replace("window.location.href", play_page_url)
-        raw = raw.replace("MacPlayer.Parse", self.host + "/?url=")
+        if "acfun58.php?id=" in raw or "yun.92cj.com" in raw:
+            raw = raw.replace("MacPlayer.Parse", "")
+        else:
+            raw = raw.replace("MacPlayer.Parse", self.host + "/?url=")
         return raw
+
+    def _build_tudou_yunbox_url(self, video_url, play_page_url):
+        raw = str(video_url or "").strip()
+        source_type = ""
+        vid = raw
+        matched = re.search(r"[?&]t=([^&]+)$", raw)
+        if matched:
+            source_type = matched.group(1)
+            vid = raw[: matched.start()]
+        vid = vid.replace("+", " ")
+        return (
+            "https://yun.92cj.com/yunbox/"
+            f"?type={quote(source_type)}&vid={quote(vid)}&referer={play_page_url}"
+        )
 
     def _resolve_player_url(self, player, play_page_url):
         media = self._decode_player_url(player.get("url", ""), player.get("encrypt", "0"))
@@ -263,27 +280,31 @@ class Spider(BaseSpider):
             return ""
         js_url = f"{self.host}/static/player/{source}.js"
         js_text = self._get_html(js_url, headers={"Referer": play_page_url})
-        iframe_url = self._extract_js_src(js_text, media, play_page_url)
-        if not iframe_url or "type=" not in iframe_url:
+        parser_page_url = ""
+        if source == "tudou":
+            parser_page_url = self._build_tudou_yunbox_url(media, play_page_url)
+        else:
+            parser_page_url = self._extract_js_src(js_text, media, play_page_url)
+        if not parser_page_url or ("type=" not in parser_page_url and source != "tudou"):
             return ""
-        iframe_html = self._get_html(iframe_url, headers={"Referer": self.host})
+        iframe_html = self._get_html(parser_page_url, headers={"Referer": play_page_url})
         if not re.search(r'vid\s*=\s*".+?"', iframe_html):
             return ""
         api_path = self.regStr(r'post\("(.*?)"', iframe_html)
         if not api_path:
             return ""
-        post_url = urljoin(self.host + "/", api_path.lstrip("/"))
+        post_url = urljoin(parser_page_url, api_path.lstrip("/"))
         token = self.regStr(r'token\s*=\s*"(.*?)"', iframe_html)
         payload = {
             "vid": self.regStr(r'vid\s*=\s*"(.*?)"', iframe_html),
-            "t": self.regStr(r'var\s+t\s*=\s*"(.*?)"', iframe_html),
+            "t": self.regStr(r'\bvar\s+t\s*=\s*"(.*?)"', iframe_html),
             "token": self._decrypt_token(token),
             "act": self.regStr(r'act\s*=\s*"(.*?)"', iframe_html),
             "play": self.regStr(r'play\s*=\s*"(.*?)"', iframe_html),
         }
-        data = self._post_json(post_url, payload, referer=self.host)
+        post_referer = parser_page_url if source == "tudou" else self.host
+        data = self._post_json(post_url, payload, referer=post_referer)
         return str(data.get("url", "")).strip()
-        return ""
 
     def playerContent(self, flag, id, vipFlags):
         play_page_url = self._decode_play_id(id)
