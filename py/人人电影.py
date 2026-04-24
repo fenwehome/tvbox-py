@@ -159,7 +159,7 @@ class Spider(BaseSpider):
     def categoryContent(self, tid, pg, filter, extend):
         page = int(pg)
         class_path = str(tid or "").lstrip("/")
-        url = self._build_url(f"{class_path}_{page}.html")
+        url = self._build_url(f"{class_path}.html" if page <= 1 else f"{class_path}_{page}.html")
         items = self._parse_cards(self._request_html(url))
         return {"page": page, "limit": len(items), "total": page * 30 + len(items), "list": items}
 

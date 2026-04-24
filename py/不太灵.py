@@ -241,12 +241,12 @@ class Spider(BaseSpider):
                 if kind == "other":
                     kind = self._normalize_drive_key(group_name)
                 counters[kind] = counters.get(kind, 0) + 1
-                line_name = f"{kind}@{counters[kind]}"
+                line_name = f"{kind}#{counters[kind]}"
                 entries.append((line_name, link))
         entries.sort(
             key=lambda pair: (
-                self.DRIVE_ORDER.get(pair[0].split("@")[0], 999),
-                int(pair[0].split("@")[1]),
+                self.DRIVE_ORDER.get(pair[0].split("#")[0], 999),
+                int(pair[0].split("#")[1]),
                 pair[0],
             )
         )
