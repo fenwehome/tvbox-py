@@ -102,6 +102,60 @@ class TestFKTVSpider(unittest.TestCase):
         self.assertEqual(result["page"], 3)
         self.assertEqual(result["list"][0]["vod_id"], "xyz789")
 
+    @patch.object(Spider, "_request_html")
+    def test_detail_content_extracts_state_and_builds_multiline_playlist(self, mock_request_html):
+        mock_request_html.return_value = """
+        <html>
+          <head>
+            <title>示例详情 -免费在线观看-凡客影视</title>
+            <meta name="description" content="这里是剧情简介" />
+            <meta property="og:image" content="https://img.example/detail.jpg" />
+          </head>
+          <body>
+            <div class="item-wrap" data-line="line-a">线路A</div>
+            <div class="item-wrap" data-line="line-b">线路B</div>
+            <script>
+              let movieId = '9001';
+              let linkId = 'ep-1';
+              var links = [{"id":"ep-1","name":"第1集"},{"id":"ep-2","title":"第2集"}];
+              var play_links = [{"id":"line-a","name":"线路A"},{"id":"line-b","name":"线路B"}];
+              var play_error_type = '';
+            </script>
+          </body>
+        </html>
+        """
+        result = self.spider.detailContent(["9001"])
+        vod = result["list"][0]
+        self.assertEqual(vod["vod_id"], "9001")
+        self.assertEqual(vod["vod_name"], "示例详情")
+        self.assertEqual(vod["vod_pic"], "https://img.example/detail.jpg")
+        self.assertEqual(vod["vod_content"], "这里是剧情简介")
+        self.assertEqual(vod["vod_play_from"], "线路A$$$线路B")
+        self.assertIn("第1集$", vod["vod_play_url"])
+        self.assertIn("第2集$", vod["vod_play_url"])
+
+    @patch.object(Spider, "_request_html")
+    def test_detail_content_falls_back_to_play_links_when_line_tabs_missing(self, mock_request_html):
+        mock_request_html.return_value = """
+        <html>
+          <head><title>无线路tab</title></head>
+          <body>
+            <script>
+              let movieId = '9002';
+              let linkId = 'ep-9';
+              var links = [{"id":"ep-9","id2":"unused"}];
+              var play_links = [{"id":"line-z","name":"备用线路"}];
+              var play_error_type = 'need_vip';
+            </script>
+          </body>
+        </html>
+        """
+        result = self.spider.detailContent(["9002"])
+        vod = result["list"][0]
+        self.assertEqual(vod["vod_play_from"], "备用线路")
+        self.assertIn("ep-9", vod["vod_play_url"])
+        self.assertIn("VIP", vod["vod_remarks"])
+
 
 if __name__ == "__main__":
     unittest.main()

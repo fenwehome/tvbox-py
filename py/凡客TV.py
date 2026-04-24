@@ -136,6 +136,130 @@ class Spider(BaseSpider):
         items = self._extract_cards(self._request_html(url))
         return {"page": page, "limit": len(items), "total": len(items), "list": items}
 
+    def _safe_json_loads(self, value, fallback=None):
+        try:
+            data = json.loads(str(value or ""))
+        except Exception:
+            data = fallback
+        return data if data is not None else fallback
+
+    def _extract_page_state(self, html):
+        body = str(html or "")
+        state = {"movieId": "", "linkId": "", "links": [], "play_links": [], "play_error_type": ""}
+        movie = re.search(r"let\s+movieId\s*=\s*['\"]([^'\"]+)['\"]", body)
+        link = re.search(r"let\s+linkId\s*=\s*['\"]([^'\"]+)['\"]", body)
+        links = re.search(r"var\s+links\s*=\s*(\[[\s\S]*?\]);", body)
+        play_links = re.search(r"var\s+play_links\s*=\s*(\[[\s\S]*?\]);", body)
+        error_type = re.search(r"var\s+play_error_type\s*=\s*['\"]([^'\"]*)['\"]", body)
+        if movie:
+            state["movieId"] = movie.group(1)
+        if link:
+            state["linkId"] = link.group(1)
+        if links:
+            state["links"] = self._safe_json_loads(links.group(1), []) or []
+        if play_links:
+            state["play_links"] = self._safe_json_loads(play_links.group(1), []) or []
+        if error_type:
+            state["play_error_type"] = error_type.group(1)
+        return state
+
+    def _extract_line_tabs(self, html):
+        root = self.html(html or "")
+        if root is None:
+            return []
+        lines = []
+        seen = set()
+        for node in root.xpath("//*[contains(@class,'item-wrap')][@data-line]"):
+            line_id = self._clean_text("".join(node.xpath("./@data-line")))
+            name = self._clean_text("".join(node.xpath(".//text()")))
+            if not line_id or line_id in seen:
+                continue
+            seen.add(line_id)
+            lines.append({"id": line_id, "name": name or line_id})
+        return lines
+
+    def _pick_episode_name(self, item):
+        for key in ("name", "title", "id"):
+            value = self._clean_text((item or {}).get(key))
+            if value:
+                return value
+        return "正片"
+
+    def detailContent(self, ids):
+        vod_id = str(ids[0] if isinstance(ids, list) and ids else ids or "").strip()
+        if not vod_id:
+            return {"list": []}
+        page_url = self.host + "/movie/detail/" + vod_id
+        html = self._request_html(page_url, self._page_headers(self.host + "/"))
+        root = self.html(html or "")
+        state = self._extract_page_state(html)
+        title = ""
+        pic = ""
+        content = ""
+        if root is not None:
+            title = self._clean_text("".join(root.xpath("//h1[1]//text()")))
+            if not title:
+                title = self._clean_text("".join(root.xpath("//title[1]//text()")))
+            title = title.replace("-免费在线观看-凡客影视", "").strip()
+            pic = self._clean_text("".join(root.xpath("//meta[@property='og:image'][1]/@content")))
+            if not pic:
+                pic = self._clean_text("".join(root.xpath("//video[1]/@poster")))
+            content = self._clean_text("".join(root.xpath("//meta[@name='description'][1]/@content")))
+
+        lines = self._extract_line_tabs(html)
+        if not lines:
+            lines = []
+            for item in state["play_links"]:
+                line_id = str((item or {}).get("id") or "").strip()
+                if not line_id:
+                    continue
+                lines.append(
+                    {
+                        "id": line_id,
+                        "name": self._clean_text((item or {}).get("name")) or line_id,
+                    }
+                )
+
+        groups = []
+        for line in lines:
+            entries = []
+            for episode in state["links"]:
+                link_id = str((episode or {}).get("id") or "").strip()
+                if not link_id:
+                    continue
+                meta = {
+                    "movie_id": state["movieId"] or vod_id,
+                    "link_id": link_id,
+                    "line_id": line["id"],
+                    "line_name": line["name"],
+                    "episode_name": self._pick_episode_name(episode),
+                    "type": "switch",
+                    "page": page_url,
+                }
+                entries.append(meta["episode_name"] + "$" + self._encode_play_id(meta))
+            if entries:
+                groups.append((line["name"], "#".join(entries)))
+
+        remarks = []
+        if state["play_error_type"] == "captcha":
+            remarks.append("站点当前需要验证码")
+        if state["play_error_type"] == "need_vip":
+            remarks.append("站点当前存在 VIP 限制")
+
+        return {
+            "list": [
+                {
+                    "vod_id": state["movieId"] or vod_id,
+                    "vod_name": title or vod_id,
+                    "vod_pic": self._abs_url(pic),
+                    "vod_content": content,
+                    "vod_remarks": " | ".join(remarks),
+                    "vod_play_from": "$$$".join(name for name, _ in groups),
+                    "vod_play_url": "$$$".join(urls for _, urls in groups),
+                }
+            ]
+        }
+
     def _encode_play_id(self, payload):
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
