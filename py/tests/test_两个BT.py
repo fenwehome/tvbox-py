@@ -134,6 +134,41 @@ class TestLiangGeBTSpider(unittest.TestCase):
             ],
         )
 
+    def test_encode_and_decode_play_id_round_trip(self):
+        payload = self.spider._decode_play_id(self.spider._encode_play_id("play-1", "900", "第1集"))
+        self.assertEqual(payload, {"pid": "play-1", "sid": "900", "name": "第1集"})
+
+    @patch.object(Spider, "_request_html")
+    def test_detail_content_extracts_meta_and_playlist(self, mock_request_html):
+        mock_request_html.return_value = """
+        <html>
+          <head><title>两个BT详情页</title></head>
+          <body>
+            <h1>示例详情</h1>
+            <div class="poster"><img src="/detail.jpg" /></div>
+            <div class="description">这里是剧情简介</div>
+            <li>主演：演员甲 / 演员乙</li>
+            <li>导演：导演甲</li>
+            <a href="/v_play/play-1.html">第1集</a>
+            <a href="/v_play/play-2.html">第2集</a>
+          </body>
+        </html>
+        """
+        result = self.spider.detailContent(["900"])
+        vod = result["list"][0]
+        first_name, first_id = vod["vod_play_url"].split("#")[0].split("$", 1)
+        self.assertEqual(mock_request_html.call_args.args[0], "https://www.bttwoo.com/movie/900.html")
+        self.assertEqual(vod["vod_id"], "900")
+        self.assertEqual(vod["vod_name"], "示例详情")
+        self.assertEqual(vod["vod_pic"], "https://www.bttwoo.com/detail.jpg")
+        self.assertEqual(vod["vod_content"], "这里是剧情简介")
+        self.assertEqual(vod["vod_actor"], "演员甲 / 演员乙")
+        self.assertEqual(vod["vod_director"], "导演甲")
+        self.assertEqual(vod["vod_play_from"], "两个BT")
+        self.assertEqual(first_name, "第1集")
+        self.assertEqual(self.spider._decode_play_id(first_id)["pid"], "play-1")
+        self.assertEqual(self.spider._decode_play_id(first_id)["sid"], "900")
+
 
 if __name__ == "__main__":
     unittest.main()

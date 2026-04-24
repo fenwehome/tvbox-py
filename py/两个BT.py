@@ -1,4 +1,6 @@
 # coding=utf-8
+import base64
+import json
 import re
 import sys
 from urllib.parse import quote, urljoin
@@ -69,7 +71,12 @@ class Spider(BaseSpider):
         return {"page": page, "limit": len(items), "total": len(items), "list": items}
 
     def detailContent(self, ids):
-        return {"list": []}
+        vod_id = str(ids[0] if isinstance(ids, list) and ids else ids or "").strip()
+        if not vod_id:
+            return {"list": []}
+        html = self._request_html(self.host + f"/movie/{vod_id}.html")
+        detail = self._parse_detail(html, vod_id)
+        return {"list": [detail]} if detail else {"list": []}
 
     def playerContent(self, flag, id, vipFlags):
         return {"parse": 1, "jx": 1, "playUrl": "", "url": "", "header": {}}
@@ -150,6 +157,86 @@ class Spider(BaseSpider):
     def _extract_vod_id(self, href):
         matched = re.search(r"/movie/(\d+)\.html", str(href or "").strip())
         return matched.group(1) if matched else ""
+
+    def _extract_play_pid(self, href):
+        matched = re.search(r"/v_play/([^.]+)\.html", str(href or "").strip())
+        return matched.group(1) if matched else ""
+
+    def _parse_detail(self, html, vod_id):
+        root = self._parse_html(html)
+        if root is None:
+            return None
+
+        vod_name = (
+            self._first_text(root, "//h1[1]")
+            or self._first_text(root, "//h2[1]")
+            or self._extract_title_text(html)
+        )
+        vod_pic = (
+            self._first_attr(root, "//img[contains(@class,'poster')][1]", "src")
+            or self._first_attr(root, "//*[contains(@class,'poster')]//img[1]", "src")
+            or self._first_attr(root, "//img[1]", "src")
+        )
+        vod_content = (
+            self._first_text(root, "//*[contains(@class,'intro')][1]")
+            or self._first_text(root, "//*[contains(@class,'description')][1]")
+            or self._first_text(root, "//*[contains(@class,'desc')][1]")
+        )
+        vod_actor = self._extract_meta_text(root, "主演")
+        vod_director = self._extract_meta_text(root, "导演")
+
+        episodes = []
+        seen = set()
+        for index, node in enumerate(root.xpath("//a[contains(@href,'/v_play/')]")):
+            href = str(node.get("href") or "").strip()
+            pid = self._extract_play_pid(href)
+            name = self._clean_text(node.text_content()) or f"第{index + 1}集"
+            if not pid or pid in seen:
+                continue
+            seen.add(pid)
+            episodes.append(f"{name}${self._encode_play_id(pid, vod_id, name)}")
+
+        if not episodes:
+            return None
+
+        return {
+            "vod_id": vod_id,
+            "vod_name": vod_name or "未知标题",
+            "vod_pic": self._abs_url(vod_pic),
+            "vod_content": vod_content,
+            "vod_actor": vod_actor,
+            "vod_director": vod_director,
+            "vod_play_from": "两个BT",
+            "vod_play_url": "#".join(episodes),
+        }
+
+    def _encode_play_id(self, pid, sid, name):
+        raw = json.dumps(
+            {"pid": str(pid or ""), "sid": str(sid or ""), "name": str(name or "")},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        return base64.b64encode(raw.encode("utf-8")).decode("utf-8")
+
+    def _decode_play_id(self, value):
+        try:
+            raw = base64.b64decode(str(value or "").encode("utf-8")).decode("utf-8")
+            data = json.loads(raw)
+        except Exception:
+            return {"pid": "", "sid": "", "name": ""}
+        return {
+            "pid": str(data.get("pid") or ""),
+            "sid": str(data.get("sid") or ""),
+            "name": str(data.get("name") or ""),
+        }
+
+    def _extract_title_text(self, html):
+        matched = re.search(r"<title>(.*?)</title>", str(html or ""), re.I | re.S)
+        return self._clean_text(matched.group(1)) if matched else ""
+
+    def _extract_meta_text(self, root, label):
+        text = self._first_text(root, f"//*[contains(text(),'{label}')][1]")
+        return re.sub(rf"^{label}[:：]?", "", text).strip()
 
     def _abs_url(self, value):
         raw = str(value or "").strip()
