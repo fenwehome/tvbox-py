@@ -1,1 +1,4 @@
 .worktrees/
+master-secret.txt
+signing-private.pem
+signing-public.pem
