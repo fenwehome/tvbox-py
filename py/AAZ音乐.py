@@ -197,7 +197,7 @@ class Spider(BaseSpider):
 
     def _post_play_api(self, song_id):
         body = "id=%s&type=music" % quote(str(song_id or ""))
-        response = self.fetch(
+        response = self.post(
             self._build_url("/js/play.php"),
             headers={
                 "User-Agent": self.headers["User-Agent"],

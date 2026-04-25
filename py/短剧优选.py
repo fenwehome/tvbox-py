@@ -83,11 +83,11 @@ class Spider(BaseSpider):
                 "search": "/v3/search",
                 "login": "https://u.shytkjgs.com/user/v1/account/login",
             },
-            "甜圈": {
-                "host": "https://mov.cenguigui.cn",
-                "url1": "/duanju/api.php?classname",
-                "url2": "/duanju/api.php?book_id",
-                "search": "/duanju/api.php?name",
+            "红果": {
+                "host": "https://api-v2.cenguigui.cn",
+                "url1": "/api/duanju/api.php?classname",
+                "url2": "/api/duanju/api.php?book_id",
+                "search": "/api/duanju/api.php?name",
             },
             "短剧网": {
                 "host": "https://sm3.cc",
@@ -100,7 +100,7 @@ class Spider(BaseSpider):
             # {"type_id": "围观", "type_name": "围观短剧"},
             # {"type_id": "剧王", "type_name": "剧王短剧"},
             {"type_id": "七星", "type_name": "七星短剧"},
-            # {"type_id": "甜圈", "type_name": "甜圈短剧"},
+            {"type_id": "红果", "type_name": "红果短剧"},
             {"type_id": "短剧网", "type_name": "短剧网"},
         ]
         self.filters = {
@@ -164,7 +164,7 @@ class Spider(BaseSpider):
                 ("七星剧场", "1"), ("七星新剧", "3"), ("七星热播", "2"),
                 ("七星星选", "7"), ("七星阳光", "5"),
             ])],
-            "甜圈": [self._filter_area("分类", [
+            "红果": [self._filter_area("分类", [
                 ("逆袭", "逆袭"), ("霸总", "霸总"), ("现代言情", "现代言情"),
                 ("打脸虐渣", "打脸虐渣"), ("豪门恩怨", "豪门恩怨"),
                 ("神豪", "神豪"), ("马甲", "马甲"), ("都市日常", "都市日常"),
@@ -198,7 +198,7 @@ class Spider(BaseSpider):
         self.filter_defaults = {
             "七猫": {"area": "0"}, "星芽": {"area": "1"}, "西饭": {"area": ""},
             "围观": {"area": "都市"}, "剧王": {"area": "/tag/逆袭/"},
-            "七星": {"area": "1"}, "甜圈": {"area": "逆袭"},
+            "七星": {"area": "1"}, "红果": {"area": "逆袭"},
             "短剧网": {"area": "1"},
         }
 
@@ -228,8 +228,7 @@ class Spider(BaseSpider):
         return {
             "list": items,
             "page": page,
-            "pagecount": pagecount,
-            "total": pagecount * len(items) if items else 0,
+            "total": pagecount * 30 + len(items) if items else 0,
         }
 
     def detailContent(self, ids):
@@ -272,8 +271,9 @@ class Spider(BaseSpider):
         }
 
     def playerContent(self, flag, id, vipFlags):
-        if "甜圈" in flag:
-            return {"parse": 0, "jx": 0, "url": f"https://mov.cenguigui.cn/duanju/api.php?video_id={id}&type=mp4"}
+        if "红果" in flag:
+            res = self._get_json("https://api-v2.cenguigui.cn/api/duanju/api.php?video_id=" + id)
+            return {"parse": 0, "jx": 0, "url": res.get("url")}
         if "星芽" in flag or "七猫" in flag or "西饭" in flag:
             return {"parse": 0, "jx": 0, "url": id}
         if "七星" in flag:
@@ -410,7 +410,7 @@ class Spider(BaseSpider):
             "围观": self._cat_weiguan,
             "剧王": self._cat_juwang,
             "七星": self._cat_qixing,
-            "甜圈": self._cat_tianquan,
+            "红果": self._cat_tianquan,
             "短剧网": self._cat_duanjuwang,
         }.get(tid)
         if handler:
@@ -535,7 +535,7 @@ class Spider(BaseSpider):
         items = []
         for it in res.get("data") or []:
             items.append({
-                "vod_id": f"甜圈@{it.get('book_id', '')}",
+                "vod_id": f"红果@{it.get('book_id', '')}",
                 "vod_name": self._s(it.get("title")),
                 "vod_pic": self._s(it.get("cover")),
                 "vod_remarks": self._s(it.get("sub_title")),
@@ -596,7 +596,7 @@ class Spider(BaseSpider):
             "围观": self._detail_weiguan,
             "剧王": self._detail_juwang,
             "七星": self._detail_qixing,
-            "甜圈": self._detail_tianquan,
+            "红果": self._detail_tianquan,
             "短剧网": self._detail_duanjuwang,
         }.get(platform)
         if handler:
@@ -753,7 +753,7 @@ class Spider(BaseSpider):
             "vod_remarks": self._s(res.get("duration")),
             "vod_year": f"更新时间:{res.get('time', '')}",
             "vod_actor": self._s(res.get("author")),
-            "vod_play_from": "甜圈短剧",
+            "vod_play_from": "红果短剧",
             "vod_play_url": play_urls,
         }
 
@@ -866,7 +866,7 @@ class Spider(BaseSpider):
             "围观": self._search_weiguan,
             "剧王": self._search_juwang,
             "七星": self._search_qixing,
-            "甜圈": self._search_tianquan,
+            "红果": self._search_tianquan,
             "短剧网": self._search_duanjuwang,
         }.get(platform_id)
         if handler:
@@ -982,10 +982,10 @@ class Spider(BaseSpider):
         items = []
         for it in res.get("data") or []:
             items.append({
-                "vod_id": f"甜圈@{it.get('book_id', '')}",
+                "vod_id": f"红果@{it.get('book_id', '')}",
                 "vod_name": self._s(it.get("title")),
                 "vod_pic": self._s(it.get("cover")),
-                "vod_remarks": f"甜圈短剧 | {self._s(it.get('sub_title'))}",
+                "vod_remarks": f"红果短剧 | {self._s(it.get('sub_title'))}",
             })
         return items
 

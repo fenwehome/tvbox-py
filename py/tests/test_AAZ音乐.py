@@ -194,17 +194,23 @@ class TestAAZMusicSpider(unittest.TestCase):
     def test_detail_content_returns_empty_list_for_invalid_vod_id(self):
         self.assertEqual(self.spider.detailContent(["bad"])["list"], [])
 
-    @patch.object(Spider, "fetch")
-    def test_player_content_resolves_song_id_to_direct_url(self, mock_fetch):
-        mock_fetch.return_value = SimpleNamespace(status_code=200, text=PLAY_JSON)
+    @patch.object(Spider, "post")
+    def test_player_content_resolves_song_id_to_direct_url(self, mock_post):
+        mock_post.return_value = SimpleNamespace(status_code=200, text=PLAY_JSON)
         result = self.spider.playerContent("AAZ音乐", "song:2001", {})
         self.assertEqual(result["parse"], 0)
         self.assertEqual(result["url"], "https://cdn.example.com/aaz/song2001.mp3")
         self.assertEqual(result["header"]["Referer"], "https://www.aaz.cx/")
+        self.assertEqual(mock_post.call_args.args[0], "https://www.aaz.cx/js/play.php")
+        self.assertEqual(mock_post.call_args.kwargs["data"], "id=2001&type=music")
+        self.assertEqual(
+            mock_post.call_args.kwargs["headers"]["Content-Type"],
+            "application/x-www-form-urlencoded; charset=UTF-8",
+        )
 
-    @patch.object(Spider, "fetch")
-    def test_player_content_returns_empty_url_for_invalid_or_empty_payload(self, mock_fetch):
-        mock_fetch.return_value = SimpleNamespace(status_code=200, text=EMPTY_PLAY_JSON)
+    @patch.object(Spider, "post")
+    def test_player_content_returns_empty_url_for_invalid_or_empty_payload(self, mock_post):
+        mock_post.return_value = SimpleNamespace(status_code=200, text=EMPTY_PLAY_JSON)
         self.assertEqual(self.spider.playerContent("AAZ音乐", "song:2001", {})["url"], "")
         self.assertEqual(self.spider.playerContent("AAZ音乐", "bad", {})["url"], "")
 
