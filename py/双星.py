@@ -1,5 +1,7 @@
 # coding=utf-8
+import re
 import sys
+from urllib.parse import quote
 
 from base.spider import Spider as BaseSpider
 
@@ -75,3 +77,38 @@ class Spider(BaseSpider):
         if "aliyundrive" in text or "alipan" in text:
             return "ali"
         return ""
+
+    def _clean_text(self, text):
+        return re.sub(r"\s+", " ", str(text or "").replace("\xa0", " ")).strip()
+
+    def _get_html(self, url):
+        response = self.fetch(url, headers=self._headers(), timeout=15)
+        if response.status_code != 200:
+            return ""
+        return response.text or ""
+
+    def _parse_cards(self, html):
+        root = self.html(html)
+        if root is None:
+            return []
+        items = []
+        for node in root.xpath("/html/body/div/div/main/div/ul/li"):
+            href = "".join(node.xpath(".//div[contains(@class,'a')]//a[1]/@href")).strip()
+            title = self._clean_text("".join(node.xpath(".//div[contains(@class,'a')]//a[1]//text()")))
+            if not href or not title:
+                continue
+            items.append({"vod_id": href, "vod_name": title, "vod_pic": "", "vod_remarks": ""})
+        return items
+
+    def categoryContent(self, tid, pg, filter, extend):
+        page = int(pg)
+        items = self._parse_cards(self._get_html(f"{self.BASE_URL}/{str(tid).strip()}_{page}/"))
+        return {"page": page, "limit": 15, "total": (page - 1) * 15 + len(items), "list": items}
+
+    def searchContent(self, key, quick, pg="1"):
+        page = int(pg)
+        keyword = self._clean_text(key)
+        if not keyword:
+            return {"page": page, "total": 0, "list": []}
+        items = self._parse_cards(self._get_html(f"{self.BASE_URL}/search/?keyword={quote(keyword)}&page={page}"))
+        return {"page": page, "total": len(items), "list": items}

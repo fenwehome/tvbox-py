@@ -1,6 +1,7 @@
 import unittest
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from urllib.parse import quote
 from unittest.mock import patch
 
 
@@ -61,6 +62,52 @@ class TestShuangXingSpider(unittest.TestCase):
         self.assertEqual(self.spider._detect_pan_type("https://pan.quark.cn/s/demo"), "quark")
         self.assertEqual(self.spider._detect_pan_type("https://www.alipan.com/s/demo"), "ali")
         self.assertEqual(self.spider._detect_pan_type("https://example.com/video"), "")
+
+    @patch.object(Spider, "_get_html")
+    def test_category_content_builds_reference_url_and_parses_cards(self, mock_get_html):
+        mock_get_html.return_value = """
+        <body>
+          <div><div><main><div><ul>
+            <li><div class="a"><a href="/post/alpha">示例国剧</a></div></li>
+            <li><div class="a"><a href="/post/beta">示例综艺</a></div></li>
+          </ul></div></main></div></div>
+        </body>
+        """
+        result = self.spider.categoryContent("ju", "3", False, {})
+        self.assertEqual(mock_get_html.call_args.args[0], "https://1.star2.cn/ju_3/")
+        self.assertEqual(result["page"], 3)
+        self.assertEqual(result["limit"], 15)
+        self.assertEqual(result["total"], 32)
+        self.assertEqual(
+            result["list"],
+            [
+                {"vod_id": "/post/alpha", "vod_name": "示例国剧", "vod_pic": "", "vod_remarks": ""},
+                {"vod_id": "/post/beta", "vod_name": "示例综艺", "vod_pic": "", "vod_remarks": ""},
+            ],
+        )
+
+    @patch.object(Spider, "_get_html")
+    def test_search_content_builds_reference_url_and_parses_results(self, mock_get_html):
+        mock_get_html.return_value = """
+        <body>
+          <div><div><main><div><ul>
+            <li><div class="a"><a href="/post/search">搜索结果</a></div></li>
+          </ul></div></main></div></div>
+        </body>
+        """
+        result = self.spider.searchContent("繁花", False, "2")
+        self.assertEqual(
+            mock_get_html.call_args.args[0],
+            f"https://1.star2.cn/search/?keyword={quote('繁花')}&page=2",
+        )
+        self.assertEqual(result["page"], 2)
+        self.assertEqual(
+            result["list"],
+            [{"vod_id": "/post/search", "vod_name": "搜索结果", "vod_pic": "", "vod_remarks": ""}],
+        )
+
+    def test_search_content_short_circuits_blank_keyword(self):
+        self.assertEqual(self.spider.searchContent("", False, "1"), {"page": 1, "total": 0, "list": []})
 
 
 if __name__ == "__main__":
