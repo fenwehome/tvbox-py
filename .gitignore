@@ -6,3 +6,4 @@ py/tests/
 py/docs/
 __pycache__
 .codex
+*.py
